@@ -1,4 +1,3 @@
-from datetime import datetime
 import json
 import os
 import time
@@ -14,38 +13,26 @@ from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium_stealth import stealth
 
-from utilities import get_timestamp, runtime_counter
+from exceptions import MaxRetryAttempsReached
+from utilities import get_UTC_timestamp, runtime_counter
 
 
 class Parser:
     """ Class for parsing data from Avito """
 
-    def __init__(
-            self, 
-            base_url, 
-            category_id, 
-            total_goal,
-            location=False, 
-            limit=300, 
-            offset=0
-            ):  
-        self.base_url = base_url
-        self.category_id = category_id
-        self.location = location
-        self.limit = limit
-        self.offset = offset
-        self.total_goal = total_goal
-        self.all_properties = []
-        self.last_stamp = get_timestamp(datetime.now())
+    def __init__(self,headless):
+        self.headless = headless
         self.driver = self.__setUp__()
 
 
     def __setUp__(self):
         chrome_options = Options()
-        #chrome_options.add_argument("--headless")  # Run in headless mode if you don't need a GUI
+        if self.headless:
+            chrome_options.add_argument("--headless")  # Run in headless mode if you don't need a GUI
         chrome_options.add_argument("--disable-gpu")
 
         # Initialize the Chrome driver
+        print("Initializing Chrome driver...")
         driver = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()), 
             options=chrome_options
@@ -63,31 +50,37 @@ class Parser:
         return driver
 
 
-    def __get_json(self,delay):
+    def __get_json(self,delay, max_attempts=3):
 
         # Parse the HTML content with BeautifulSoup
-
         page_source = self.driver.page_source
-        time.sleep(delay)
-        #driver.implicitly_wait(delay)
+        #time.sleep(delay)
+        self.driver.implicitly_wait(delay)
+        
+        attempts = 1
 
-        soup = BeautifulSoup(page_source, 'html.parser')
-
-        # Find the <pre> tag that contains the JSON data
-        pre_tag = soup.find('pre')
-
-        if pre_tag:
-            # Extract the JSON string from the <pre> tag
-            json_data = pre_tag.text
-            print("Obtained json data.")
-
+        while attempts <= max_attempts:
             try:
+                soup = BeautifulSoup(page_source, 'html.parser')
+
+                # Find the <pre> tag that contains the JSON data
+                pre_tag = soup.find('pre')
+
+                # Extract the JSON string from the <pre> tag
+                json_data = pre_tag.text
+                print("Obtained json data.")
+
                 # Convert the JSON string into a Python dictionary
                 return json.loads(json_data)
+            
             except json.JSONDecodeError as e:
-                print(f"Error decoding JSON: {e}")
-        else:
-            print("No <pre> tag found containing the JSON data.")
+                print(f"Error decoding JSON: {e}\nRetrying {attempts}/{max_attempts}...")
+                attempts += 1
+            except Exception as e:
+                print(f"{type(e).__name__} occurred: {e}\nRetrying {attempts}/{max_attempts}...")
+                attempts += 1
+
+        raise MaxRetryAttempsReached(msg="Maximum number of retry attempts reached. Skipping...")
         
 
     def __parse_data(self,data):
@@ -160,54 +153,71 @@ class Parser:
 
         print("CSV file has been written.")
 
-    
 
-    def run_scraping_loop(self, delay):
+    def run_scraping_loop(self, 
+                          base_url, 
+                          category_id, 
+                          location, 
+                          limit,  
+                          total_goal,
+                          delay):
+        
         """ Main scraping loop """
-        try:
-            # Scraping loop
-            for _ in range(0,self.total_goal,self.limit):
-                full_url = f'{self.base_url}forceLocation={self.location}&lastStamp={self.last_stamp}&limit={self.limit}&offset={self.offset}&categoryId={self.category_id}'
-                
-                # Obtaining html
-                self.driver.get(full_url)
-                print(f"Navigated to {self.driver.current_url}")
+    
+        all_properties = []
+        last_stamp = get_UTC_timestamp()
+        offset = 0
 
-                json_data = self.__get_json__(delay)
-                if json_data:
-                    parsed_data = self.__parse_data__(json_data)
-                    self.all_properties.extend(parsed_data)
 
-                self.offset += self.limit
-                if self.total_goal - self.offset < self.limit:
-                    self.limit = self.total_goal - self.offset
-                # Waiting before the next request
-                time.sleep(delay)
+        # Scraping loop
+        while len(all_properties) <= total_goal:
+            full_url = f'{base_url}forceLocation={location}&lastStamp={last_stamp}&limit={limit}&offset={offset}&categoryId={category_id}'
+            
+            # Obtaining html
+            self.driver.get(full_url)
+            print(f"Navigated to {self.driver.current_url}")
 
-        except Exception as e:
-            print(f"{type(e).__name__} occurred: {e}")
-        finally:
-            self.driver.quit()
-            # Print all fetched properties
-            print(f"Total properties fetched: {len(self.all_properties)}")
-            return self.all_properties
+            try:
+                json_data = self.__get_json(delay)
+                parsed_data = self.__parse_data(json_data)
+                all_properties.extend(parsed_data)
+
+            except MaxRetryAttempsReached as e:
+                print(e)
+        
+            except Exception as e:
+                print(f"{type(e).__name__} occurred: {e}")
+            
+            offset += limit
+
+            # Waiting before the next request
+            time.sleep(delay)
+    
+        self.driver.quit()
+        # Print all fetched properties
+        print(f"Total properties fetched: {len(all_properties)}")
+        return all_properties
 
 
 @runtime_counter
 def main():
-    parser = Parser(
-        base_url = 'https://www.avito.ru/web/1/main/items?',
+    parser = Parser(headless=False)
+    data = parser.run_scraping_loop(
+        base_url='https://www.avito.ru/web/1/main/items?',
+        location=False,
         category_id=4,
-        total_goal=10000,
-        limit=300
+        total_goal=1000,
+        limit=300,
+        delay=5
     )
-    
-    data = set(parser.run_scraping_loop(delay=3))
-    parser.save_to_csv(data,path='data',filename='output.csv')
+    parser.save_to_csv(data=data,path='data',filename='output.csv')
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("Manual shutdown...")
     
     
 
