@@ -1,5 +1,5 @@
 import time
-import datetime
+from datetime import datetime, UTC
 import functools
 
 
@@ -30,6 +30,10 @@ def runtime_counter(func):
     return wrapper
 
 
-def get_timestamp(current_time):
-    return datetime.datetime.timestamp(current_time)*1000
+def get_UTC_timestamp():
+    curr_dt = datetime.now(UTC)
+    timestamp = int(round(curr_dt.timestamp()))
+    return timestamp
+
+
 
