@@ -35,10 +35,11 @@ def runtime_counter(func):
 
 
 
-def get_UTC_timestamp():
+def get_utc_timestamp():
     curr_dt = datetime.now(UTC)
     timestamp = int(round(curr_dt.timestamp()))
     return timestamp
+
 
 def dedupe(items, key=None): 
     seen = set()
@@ -48,20 +49,15 @@ def dedupe(items, key=None):
             yield item 
             seen.add(val)
 
-def return_unique_records(items):
+
+def return_unique_records(items) -> list:
     records = list(dedupe(items, key=lambda d: d['id']))
     print (f"Returning {len(records)} unique records.")
     return records
 
 
-def put_in_queue(data):
-    q = Queue()
-    for d in data:
-        q.put(d)
-    return q
 
 
-def count_occurances(data):
-    category_count = Counter(data)
-    print(category_count)
+
+
 
