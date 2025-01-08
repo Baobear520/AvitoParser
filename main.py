@@ -1,8 +1,8 @@
 import os
-from browsers import UndetectedChromeBrowser
-from parsers import Parser
-from utilities import runtime_counter
-from db import save_to_postgres
+from core.browsers import UndetectedChromeBrowser
+from core.parsers import Parser
+from core.utilities import runtime_counter
+from core.db import save_to_postgres
 
 @runtime_counter
 def main():
