@@ -11,7 +11,7 @@ from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
 
 from exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
-from utilities import get_UTC_timestamp
+from utilities import get_utc_timestamp, return_unique_records
 
 
 
@@ -19,7 +19,7 @@ from utilities import get_UTC_timestamp
 class Parser:
     """Class for parsing data from Avito."""
 
-    def __init__(self, browser, max_workers=3, delay_range=(3, 5)):
+    def __init__(self, browser, max_workers=3, delay_range=(5, 10)):
         """
         Initialize the parser.
         :param browser: Callable to produce browser instances.
@@ -52,7 +52,7 @@ class Parser:
             
             except (json.JSONDecodeError, TimeoutException, ValueError) as e:
                 attempts += 1
-                print(f"Attempt {attempts}/{max_attempts} failed: {e}")
+                print(f"Attempt {attempts}/{max_attempts} failed for {url}: {e}")
         raise MaxRetryAttemptsReachedException("Max retry attempts reached.")
 
 
@@ -61,16 +61,19 @@ class Parser:
         properties = []
         for item in data.get('items', []):
             try:
-                properties.append({
+                object = {
                     'id': item.get('id'),
                     'category': item.get('category', {}).get('slug'),
                     'title': item.get('title', 'N/A'),
                     'price': item.get('priceDetailed', {}).get('string', 'N/A'),
-                    'price_for': item.get('priceDetailed', {}).get('postfix', 'на продажу'),
+                    'price_for': item.get('priceDetailed', {}).get('postfix', ''),
                     'location': item.get('location', {}).get('name', 'N/A'),
                     'photos': [img.get('864x864', '') for img in item.get('images', [])],
-                    'URL': item.get('urlPath', ''),
-                })
+                    'URL': item.get('urlPath', '')
+                }
+                if object['price_for'] == "": 
+                    object['price_for'] = "на продажу"
+                properties.append(object)
             except Exception as e:
                 print(f"Error parsing item: {e}")
         return properties
@@ -96,14 +99,14 @@ class Parser:
         :return: List of URLs to scrape.
         """
             
-        last_stamp = get_UTC_timestamp()
+        last_stamp = get_utc_timestamp()
         urls = []
-        while offset < total_goal:
+        while offset < total_goal * 2:
             full_url = f'{base_url}forceLocation={location}&lastStamp={last_stamp}&limit={limit}&offset={offset}&categoryId={category_id}'
             urls.append(full_url)
-            print(f"{full_url} added to the list.")
-            offset += limit
-        
+           
+            offset += limit * 2
+        print(f"{len(urls)} URLs have been added to the list.")
         return urls
         
 
@@ -115,34 +118,49 @@ class Parser:
             with self.lock:
                 output.extend(parsed_data)
                 print(f"Added {len(parsed_data)} objects.")
+
+        except MaxRetryAttemptsReachedException as e:
+            print(f"Max retries reached for {url}. Moving to the next URL.")
+        except AccessDeniedException as e:
+            print(f"Access denied for {url}. Stopping the script.")
+            raise e  # Re-raise the exception to stop the scraping process
         except Exception as e:
-            print(f"Error in worker for {url}: {e}")
-            driver.quit()
+            print(f"Unexpected error in worker for {url}: {e}")
+
 
     def _run_thread_pool(self, urls: list, output: list):
-        """Run the thread pool to process URLs."""
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = []
-            for url in urls:
-                delay = random.randint(*self.delay_range)
-                driver = self.browser()
-                futures.append(executor.submit(self._worker, driver, url, output, delay))
-            for future in as_completed(futures):
-                future.result()
-                driver.quit()
+        """Helper function to run the workers in a thread pool."""
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            driver = self.browser()
+            delay = random.randint(*self.delay_range)
+            futures = [executor.submit(
+                self._worker, driver, url, output, delay) for url in urls]
             
+            for future in as_completed(futures):
+                try:
+                    future.result()  # Wait for the result to be available
+                except AccessDeniedException:
+                    print("Access Denied Exception raised in thread. Stopping script.")
+                    break  # Stop further execution in the thread pool if access is denied
 
 
     def scrape(self, urls: list, multithreaded: bool = False) -> list:
         """Main scraping function."""
+        
         output = []
         if multithreaded:
             self._run_thread_pool(urls, output)
         else:
-            driver = self.browser()
+            driver = self.browser()  # This is where you initialize your driver
             for url in urls:
-                self._worker(driver, url, output, random.randint(*self.delay_range))
-        return output
+                try:
+                    self._worker(driver, url, output, random.randint(*self.delay_range))
+                except AccessDeniedException:
+                    print("Access Denied Exception raised. Stopping script.")
+                    break  # Stop the loop when access is denied
+        print(f"Total: {len(output)} objects.")
+        return return_unique_records(output)
+
 
     def save_to_csv(self, data: list, path: str, filename: str):
         """Save data to a CSV file."""
