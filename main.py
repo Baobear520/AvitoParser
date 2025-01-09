@@ -1,5 +1,6 @@
 import os
 from core.browsers import UndetectedChromeBrowser
+from core.enums import CategoryType
 from core.parsers import Parser
 from core.utilities import runtime_counter
 from core.db import save_to_postgres
@@ -8,8 +9,9 @@ from core.db import save_to_postgres
 def main():
         browser = UndetectedChromeBrowser()
         parser = Parser(browser.get_driver)
-        
-        urls = parser.get_urls(category_id=4,total_goal=1000,limit=300,offset=0)
+
+        category = CategoryType.REAL_ESTATE
+        urls = parser.get_urls(category=category,total_goal=1000,limit=300,offset=0)
         data = parser.scrape(urls)
         
         os.makedirs('data', exist_ok=True)

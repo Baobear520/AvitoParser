@@ -10,6 +10,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
 
+from core.enums import CategoryType
 from exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
 from utilities import get_utc_timestamp, return_unique_records
 
@@ -61,25 +62,25 @@ class Parser:
         properties = []
         for item in data.get('items', []):
             try:
-                object = {
+                obj = {
                     'id': item.get('id'),
                     'category': item.get('category', {}).get('slug'),
                     'title': item.get('title', 'N/A'),
                     'price': item.get('priceDetailed', {}).get('string', 'N/A'),
                     'price_for': item.get('priceDetailed', {}).get('postfix', ''),
                     'location': item.get('location', {}).get('name', 'N/A'),
-                    'photos': [img.get('864x864', '') for img in item.get('images', [])],
-                    'URL': item.get('urlPath', '')
+                    'photo_URLs': [img.get('864x864', '') for img in item.get('images', [])],
+                    'object_URL': item.get('urlPath', '')
                 }
-                if object['price_for'] == "": 
-                    object['price_for'] = "на продажу"
-                properties.append(object)
+                if obj['price_for'] == "":
+                    obj['price_for'] = "на продажу"
+                properties.append(obj)
             except Exception as e:
                 print(f"Error parsing item: {e}")
         return properties
     
     def get_urls(self,
-                category_id: int,
+                category: CategoryType,
                 total_goal: int,
                 limit: int,
                 offset: int,
@@ -90,7 +91,7 @@ class Parser:
         """
         Generate URLs for scraping.
 
-        :param category_id: Category ID for the items.
+        :param category: Category enum instance.
         :param total_goal: Total number of items to fetch.
         :param limit: Number of items per request.
         :param offset: Starting offset for the requests.
@@ -100,6 +101,8 @@ class Parser:
         """
             
         last_stamp = get_utc_timestamp()
+        category_id = category.category_id  # Get numeric ID from the enum
+
         urls = []
         while offset < total_goal * 2:
             full_url = f'{base_url}forceLocation={location}&lastStamp={last_stamp}&limit={limit}&offset={offset}&categoryId={category_id}'
@@ -162,7 +165,7 @@ class Parser:
         return return_unique_records(output)
 
 
-    def save_to_csv(self, data: list, path: str, filename: str):
+    def save_to_csv(self, data: list[dict], path: str, filename: str):
         """Save data to a CSV file."""
         if not data:
             print("No data to save.")
