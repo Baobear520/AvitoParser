@@ -15,8 +15,8 @@ PRODUCT_SCHEMA = {
     "price": "TEXT",
     "price_for": "TEXT",
     "location": "TEXT",
-    "photos": "TEXT[]",
-    "URL": "TEXT",
+    "photo_URLs": "TEXT[]",
+    "object_URL": "TEXT",
     "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
 }
 
