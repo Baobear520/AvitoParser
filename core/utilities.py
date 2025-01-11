@@ -1,8 +1,15 @@
+from os import PathLike
+from pathlib import Path
 from queue import Queue
 import time
+import os
 from datetime import datetime, UTC
 import functools
-from collections import Counter
+from typing import Iterable
+
+import pandas as pd
+
+from core.db import PostgresDB, DB_NAME
 
 
 def runtime_counter(func):
@@ -41,6 +48,84 @@ def get_utc_timestamp():
     return timestamp
 
 
+
+class PandasHelper:
+
+    def merge_from_csv_files(self, csv_files: list[str | Path]) -> pd.DataFrame:
+        """
+        Merge multiple CSV files into a single DataFrame.
+
+        Parameters:
+            csv_files (list[str | Path]): List of paths to the CSV files to merge.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the merged and deduplicated data.
+        """
+        data_frames = []
+
+        # Read each file into a DataFrame
+        for file in csv_files:
+            try:
+                df = pd.read_csv(file)
+                data_frames.append(df)
+            except (FileNotFoundError, pd.errors.EmptyDataError):
+                print(f"Warning: Could not read {file}. Skipping.")
+
+        # Concatenate and drop duplicates based on 'id'
+        try:
+            merged_df = pd.concat(data_frames, ignore_index=True).drop_duplicates(subset='id', keep='last')
+            print(f"Merged {len(csv_files)} files. Total records after deduplication: {len(merged_df)}")
+            return merged_df
+        except ValueError as e:
+            print(f"Error merging files: {e}")
+            return pd.DataFrame()
+
+
+    def save_data(
+            self,
+            df: pd.DataFrame,
+            output_file_name: str,
+            create_new_file: bool = True
+    ) -> None:
+        """
+        Save the merged DataFrame to a file, either creating a new file or appending to an existing file.
+
+        Parameters:
+            df (pd.DataFrame): The DataFrame to save.
+            output_file_name (str): Path to the output file.
+            create_new_file (bool): Whether to create a new file or append to an existing one.
+        """
+        if df.empty:
+            print("No data to save. Exiting...")
+            return
+
+        if create_new_file:
+            df.to_csv(output_file_name, index=False)
+            if not os.path.exists(output_file_name):
+                # Save as a new file
+                print(f"New file created: {output_file_name}. Total records: {len(df)}")
+            else:
+                print(f"File already exists: {output_file_name}. Rewriting to it.")
+        else:
+            # Append to the existing file while maintaining uniqueness
+            try:
+                existing_df = pd.read_csv(output_file_name)
+                combined_df = pd.concat([existing_df, df], ignore_index=True).drop_duplicates(
+                    subset='id', keep='last'
+                )
+                combined_df.to_csv(output_file_name, index=False)
+                print(f"Appended and updated file: {output_file_name}. Total records: {len(combined_df)}")
+            except (FileNotFoundError, pd.errors.EmptyDataError):
+                print(f"Error: Could not read {output_file_name}. Saving as a new file.")
+                df.to_csv(output_file_name, index=False)
+
+
+
+
+
+
+
+
 def dedupe(items, key=None): 
     seen = set()
     for item in items:
@@ -57,6 +142,40 @@ def return_unique_records(items) -> list:
 
 
 
+
+def merge_csv_files(input_folder, output_file_name):
+    # Get all CSV files in the input folder
+    csv_files = [f for f in os.listdir(input_folder) if f.endswith('.csv')]
+
+    # Create an empty list to hold DataFrames
+    data_frames = []
+
+    for file in csv_files:
+        file_path = os.path.join(input_folder, file)
+        # Read the CSV file into a DataFrame
+        df = pd.read_csv(file_path)
+        data_frames.append(df)
+
+    # Concatenate all DataFrames into one
+    merged_df = pd.concat(data_frames, ignore_index=True)
+
+    # Optional: Drop duplicates based on a specific column (e.g., 'id')
+    merged_df.drop_duplicates(subset='id', keep='first', inplace=True)
+
+    # Save the merged DataFrame to a new CSV file
+    merged_df.to_csv(output_file_name, index=False)
+    print(f"Merged CSV file saved to {output_file_name}")
+
+
+# def clean_data(filename):
+#     df = pd.read_csv(filename)
+#
+#     df.loc[df['price_for'] == 'на продажу', 'price_for'] = None
+#     print(df.dtypes)
+
+
+def save_to_db_from_csv(filename):
+    pass
 
 
 
