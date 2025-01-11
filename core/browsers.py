@@ -9,7 +9,7 @@ from selenium.common.exceptions import TimeoutException
 class ChromeBrowser:
     """ A class for initializing base Chrome webdriver"""
 
-    def __init__(self, headless=False, disable_images=True, timeout=60, proxy=None):
+    def __init__(self, headless=False, disable_images=True, timeout=30, proxy=None):
         self.headless = headless
         self.disable_images = disable_images
         self.timeout = timeout
