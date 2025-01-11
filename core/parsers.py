@@ -11,8 +11,8 @@ from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
 
 from core.enums import CategoryType
-from exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
-from utilities import get_utc_timestamp, return_unique_records
+from core.exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
+from core.utilities import get_utc_timestamp, return_unique_records
 
 
 
@@ -53,7 +53,7 @@ class Parser:
             
             except (json.JSONDecodeError, TimeoutException, ValueError) as e:
                 attempts += 1
-                print(f"Attempt {attempts}/{max_attempts} failed for {url}: {e}")
+                print(f"Attempt {attempts}/{max_attempts} failed for {url}")
         raise MaxRetryAttemptsReachedException("Max retry attempts reached.")
 
 
@@ -70,7 +70,7 @@ class Parser:
                     'price_for': item.get('priceDetailed', {}).get('postfix', ''),
                     'location': item.get('location', {}).get('name', 'N/A'),
                     'photo_URLs': [img.get('864x864', '') for img in item.get('images', [])],
-                    'object_URL': item.get('urlPath', '')
+                    'source_URL': item.get('urlPath', '')
                 }
                 if obj['price_for'] == "":
                     obj['price_for'] = "на продажу"
@@ -171,10 +171,36 @@ class Parser:
             print("No data to save.")
             return
         filepath = os.path.join(path,filename)
-        with open(filepath,'w', newline='', encoding='utf-8') as file:
-            writer = csv.DictWriter(file, fieldnames=data[0].keys())
-            writer.writeheader()
-            writer.writerows(data)
-        print(f"Data saved to {filepath}.")
+        # Check if the file already exists
+        if os.path.exists(filepath):
+            new_data = self._read_unique_data_from_csv(filepath, data)
+            if new_data:
+                with open(filepath,'a', newline='', encoding='utf-8') as file:
+                    writer = csv.DictWriter(file, fieldnames=data[0].keys())
+                    writer.writerows(new_data)
+                    print(f"Data appended to {filepath}.")
+        else:
+            with open(filepath,'w', newline='', encoding='utf-8') as file:
+                writer = csv.DictWriter(file, fieldnames=data[0].keys())
+                writer.writeheader()
+                writer.writerows(data)
+            print(f"Created file {filepath} and saved data.")
+
+
+    def _read_unique_data_from_csv(self, filepath, data):
+        existing_data = set()
+        with open(filepath, 'r', newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            # Add existing rows to the set based on the unique field
+            for row in reader:
+                existing_data.add(row['id'])
+        # Filter out the rows that already exist in the CSV
+        new_data = [row for row in data if row['id'] not in existing_data]
+        if not new_data:
+            print("No new unique data to save.")
+            return
+        print(f"New data: {len(new_data)} objects")
+        return new_data
+
 
 
