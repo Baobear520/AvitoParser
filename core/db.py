@@ -7,7 +7,8 @@ DB_PORT='5432'
 DB_USER = 'aldmikon'
 DB_PASSWORD = '123'
 DB_NAME = 'avito'
-DB_TABLE_NAME = 'real_estate'
+DB_TABLE_NAME = 'avito'
+
 PRODUCT_SCHEMA = {
     "id": "BIGINT PRIMARY KEY",
     "category": "TEXT",
@@ -16,7 +17,7 @@ PRODUCT_SCHEMA = {
     "price_for": "TEXT",
     "location": "TEXT",
     "photo_URLs": "TEXT[]",
-    "object_URL": "TEXT",
+    "source_URL": "TEXT",
     "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
 }
 
@@ -54,7 +55,7 @@ class PostgresDB:
             with self.__connect() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(create_query)
-                    print(f"Table '{table_name}' created successfully.")
+                    print(f"Table '{table_name}' created successfully (if not existed).")
 
         except psycopg2.Error as e:
             print(f"Error during table creation: {e}")
@@ -95,7 +96,4 @@ class PostgresDB:
 
 
 
-def save_to_postgres(data: list[dict]) -> None:
-    db = PostgresDB(DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME)
-    db.create_table(DB_TABLE_NAME,PRODUCT_SCHEMA)
-    db.save_to_db(DB_TABLE_NAME, data)
+
