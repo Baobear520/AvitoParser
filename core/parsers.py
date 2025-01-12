@@ -20,7 +20,7 @@ from core.utilities import get_utc_timestamp, return_unique_records
 class Parser:
     """Class for parsing data from Avito."""
 
-    def __init__(self, browser, max_workers=3, delay_range=(5, 10)):
+    def __init__(self, browser, max_workers=3, delay_range=(5, 15)):
         """
         Initialize the parser.
         :param browser: Callable to produce browser instances.
