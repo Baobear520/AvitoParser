@@ -31,6 +31,7 @@ class PostgresDB:
         self.port = port
         self.password = password
         self.db_name = db_name
+        self.conn = self.__connect()
 
     def __connect(self):
         """Establish a database connection."""
