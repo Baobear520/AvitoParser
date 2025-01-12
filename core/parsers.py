@@ -165,42 +165,7 @@ class Parser:
         return return_unique_records(output)
 
 
-    def save_to_csv(self, data: list[dict], path: str, filename: str):
-        """Save data to a CSV file."""
-        if not data:
-            print("No data to save.")
-            return
-        filepath = os.path.join(path,filename)
-        # Check if the file already exists
-        if os.path.exists(filepath):
-            new_data = self._read_unique_data_from_csv(filepath, data)
-            if new_data:
-                with open(filepath,'a', newline='', encoding='utf-8') as file:
-                    writer = csv.DictWriter(file, fieldnames=data[0].keys())
-                    writer.writerows(new_data)
-                    print(f"Data appended to {filepath}.")
-        else:
-            with open(filepath,'w', newline='', encoding='utf-8') as file:
-                writer = csv.DictWriter(file, fieldnames=data[0].keys())
-                writer.writeheader()
-                writer.writerows(data)
-            print(f"Created file {filepath} and saved data.")
 
-
-    def _read_unique_data_from_csv(self, filepath, data):
-        existing_data = set()
-        with open(filepath, 'r', newline='', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            # Add existing rows to the set based on the unique field
-            for row in reader:
-                existing_data.add(row['id'])
-        # Filter out the rows that already exist in the CSV
-        new_data = [row for row in data if row['id'] not in existing_data]
-        if not new_data:
-            print("No new unique data to save.")
-            return
-        print(f"New data: {len(new_data)} objects")
-        return new_data
 
 
 
