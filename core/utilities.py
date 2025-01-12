@@ -50,6 +50,15 @@ def get_utc_timestamp():
 
 
 class PandasHelper:
+    def __init__(self, path_to_save : PathLike | str = 'data'):
+        """
+        Initialize the PandasHelper class.
+
+        Parameters:
+            path_to_save (PathLike | str): The path to save the CSV file within the project.
+        """
+        self.path_to_save = path_to_save
+        os.makedirs(self.path_to_save, exist_ok=True)
 
     def merge_from_csv_files(self, csv_files: list[str | Path]) -> pd.DataFrame:
         """
@@ -81,10 +90,10 @@ class PandasHelper:
             return pd.DataFrame()
 
 
-    def save_data(
+    def save_data_to_csv_file(
             self,
             df: pd.DataFrame,
-            output_file_name: str,
+            output_file_name: PathLike | str,
             create_new_file: bool = True
     ) -> None:
         """
@@ -99,24 +108,26 @@ class PandasHelper:
             print("No data to save. Exiting...")
             return
 
+        filepath = os.path.join(self.path_to_save, output_file_name)
+
         if create_new_file:
-            df.to_csv(output_file_name, index=False)
-            if not os.path.exists(output_file_name):
+            if not os.path.exists(filepath):
                 # Save as a new file
-                print(f"New file created: {output_file_name}. Total records: {len(df)}")
+                print(f"New file created: {filepath}. Total records: {len(df)}")
             else:
-                print(f"File already exists: {output_file_name}. Rewriting to it.")
+                print(f"File already exists: {filepath}. Rewriting to it.")
+            df.to_csv(filepath, index=False)
         else:
             # Append to the existing file while maintaining uniqueness
             try:
-                existing_df = pd.read_csv(output_file_name)
+                existing_df = pd.read_csv(filepath)
                 combined_df = pd.concat([existing_df, df], ignore_index=True).drop_duplicates(
                     subset='id', keep='last'
                 )
-                combined_df.to_csv(output_file_name, index=False)
-                print(f"Appended and updated file: {output_file_name}. Total records: {len(combined_df)}")
+                combined_df.to_csv(filepath, index=False)
+                print(f"Appended and updated file: {filepath}. Total records: {len(combined_df)}")
             except (FileNotFoundError, pd.errors.EmptyDataError):
-                print(f"Error: Could not read {output_file_name}. Saving as a new file.")
+                print(f"Error: Could not read {filepath}. Saving as a new file.")
                 df.to_csv(output_file_name, index=False)
 
 
