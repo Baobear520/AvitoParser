@@ -3,10 +3,10 @@ import enum
 
 class CategoryType(enum.Enum):
 
-    VEHICLES_AND_PARTS = (1, "Авто/мото")
-    HOUSEHOLD_EQUIPMENT = (2, "Бытовая техника/Домашнее оборудование")
-    REAL_ESTATE = (4, "Недвижимость")
-    ELECTRONICS = (6, "Электроника")
+    VEHICLES_AND_PARTS = (1, "vehicles_and_parts")
+    HOUSEHOLD_EQUIPMENT = (2, "household_equipment")
+    REAL_ESTATE = (4, "real_estate")
+    ELECTRONICS = (6, "electronics")
 
     def __init__(self, category_id, verbose_name):
         self.category_id = category_id
@@ -19,6 +19,7 @@ class CategoryType(enum.Enum):
             if category.category_id == category_id:
                 return category
         raise ValueError(f"Category ID {category_id} not found.")
+
 
 
 
