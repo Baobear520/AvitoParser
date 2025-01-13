@@ -1,9 +1,7 @@
 import threading
 import time
 import json
-import csv
 import random
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -20,7 +18,7 @@ from core.utilities import get_utc_timestamp, return_unique_records
 class Parser:
     """Class for parsing data from Avito."""
 
-    def __init__(self, browser, max_workers=3, delay_range=(5, 15)):
+    def __init__(self, browser, base_url, max_workers=3, delay_range=(5, 15)):
         """
         Initialize the parser.
         :param browser: Callable to produce browser instances.
@@ -29,6 +27,7 @@ class Parser:
         """
         self.browser = browser
         self.max_workers = max_workers
+        self.base_url = base_url
         self.delay_range = delay_range
         self.lock = threading.Lock()
 
@@ -57,34 +56,55 @@ class Parser:
         raise MaxRetryAttemptsReachedException("Max retry attempts reached.")
 
 
-    def _parse_data(self, data: dict) -> list:
-        """Parse JSON data into structured property objects."""
-        properties = []
+    def _parse_item(self, item, category_name):
+        """
+        Parse an individual item into a structured object.
+
+        :param item: Raw item data from the API response.
+        :param category_name: The category being scraped (e.g., 'real_estate', 'vehicles', 'electronics').
+        :return: Parsed object with the 'object_category' field included.
+        """
+        obj = {
+            'id': item.get('id'),
+            'object_category': category_name,  # Add the category being scraped
+            'subcategory': item.get('category', {}).get('slug'),
+            'title': item.get('title', 'N/A'),
+            'price': item.get('priceDetailed', {}).get('string', 'N/A'),
+            'price_for': item.get('priceDetailed', {}).get('postfix', ''),
+            'location': item.get('location', {}).get('name', 'N/A'),
+            'photo_URLs': [img.get('864x864', '640x640') for img in item.get('images', [])],
+            'source_URL': item.get('urlPath', '')
+        }
+
+        # Default value for price_for if it's empty
+        if obj['price_for'] == "":
+            obj['price_for'] = "на продажу"
+
+        return obj
+
+    def _parse_data(self, data, category_name):
+        """
+        Parse a list of raw data items into structured objects with 'object_category'.
+
+        :param data: JSON data containing raw items from the API.
+        :param category: The category being scraped (e.g., 'real_estate', 'vehicles', 'electronics').
+        :return: List of parsed objects.
+        """
+        objects = []
         for item in data.get('items', []):
             try:
-                obj = {
-                    'id': item.get('id'),
-                    'category': item.get('category', {}).get('slug'),
-                    'title': item.get('title', 'N/A'),
-                    'price': item.get('priceDetailed', {}).get('string', 'N/A'),
-                    'price_for': item.get('priceDetailed', {}).get('postfix', ''),
-                    'location': item.get('location', {}).get('name', 'N/A'),
-                    'photo_URLs': [img.get('864x864', '') for img in item.get('images', [])],
-                    'source_URL': item.get('urlPath', '')
-                }
-                if obj['price_for'] == "":
-                    obj['price_for'] = "на продажу"
-                properties.append(obj)
+                obj = self._parse_item(item, category_name)
+                objects.append(obj)
             except Exception as e:
                 print(f"Error parsing item: {e}")
-        return properties
+        return objects
     
     def get_urls(self,
                 category: CategoryType,
                 total_goal: int,
                 limit: int,
                 offset: int,
-                base_url: str = 'https://www.avito.ru/web/1/main/items?',
+                base_url: str,
                 location: bool = False
                 
     ) -> list:
@@ -111,16 +131,29 @@ class Parser:
             offset += limit * 2
         print(f"{len(urls)} URLs have been added to the list.")
         return urls
-        
 
-    def _worker(self, driver: WebDriver, url: str, output: list, delay: int):
+    def url_generator(self, category_id, limit, offset, last_stamp, location):
+        """
+        Dynamically generate the next URL based on the current offset.
+
+        :param category_id: The category being scraped (e.g., 'real_estate').
+        :param limit: Number of objects to fetch per request.
+        :param offset: Current offset for pagination.
+        :param last_stamp: Timestamp for the last request.
+        :param location: Location filter for the request.
+        :return: Generated URL.
+        """
+        return f"{self.base_url}?forceLocation={location}&lastStamp={last_stamp}&limit={limit}&offset={offset}&categoryId={category_id}"
+
+    def _worker(self, driver: WebDriver, url: str, category_name: CategoryType, delay: int):
         """Worker function for fetching and parsing data."""
         try:
             json_data = self._get_json(driver, url, delay)
-            parsed_data = self._parse_data(json_data)
-            with self.lock:
-                output.extend(parsed_data)
-                print(f"Added {len(parsed_data)} objects.")
+            parsed_data = self._parse_data(json_data, category_name)
+            # with self.lock:
+            #     output.extend(parsed_data)
+            #     print(f"Added {len(parsed_data)} objects.")
+            return parsed_data
 
         except MaxRetryAttemptsReachedException as e:
             print(f"Max retries reached for {url}. Moving to the next URL.")
@@ -130,14 +163,46 @@ class Parser:
         except Exception as e:
             print(f"Unexpected error in worker for {url}: {e}")
 
+    def fetch_objects(self, driver, total_goal, limit, location=False):
+        """
+        Fetch objects dynamically until total_goal is met.
+        :parameters:
+            - driver: WebDriver instance
+            - total_goal: Total number of objects to fetch
+            - limit: Number of objects per API call
+            - delay: Delay between API requests
+            - location: Location filter for the request
+        """
 
-    def _run_thread_pool(self, urls: list, output: list):
+        fetched_objects = []
+        offset = 0
+        last_stamp = get_utc_timestamp()
+
+        while len(fetched_objects) < total_goal:
+            try:
+                for category in CategoryType:
+                    # Generate the next URL dynamically
+                    url = self.url_generator(category.category_id, limit, offset, last_stamp, location)
+                    print(f"Fetching data from: {url}")
+
+                    # Fetch and parse data from the current URL
+                    new_objects = self._worker(driver,url,category.verbose_name,random.randint(*self.delay_range))
+                    fetched_objects.extend(new_objects)
+                    print(f"Added {len(new_objects)} objects.")
+                offset += limit * 2
+            except AccessDeniedException:
+                print("Access Denied Exception raised. Stopping script.")
+                break  # Stop the loop when access is denied
+
+        return return_unique_records(fetched_objects)
+
+    def _run_thread_pool(self, category: int, urls: list, output: list):
         """Helper function to run the workers in a thread pool."""
         with ThreadPoolExecutor(max_workers=5) as executor:
             driver = self.browser()
             delay = random.randint(*self.delay_range)
             futures = [executor.submit(
-                self._worker, driver, url, output, delay) for url in urls]
+                self._worker, driver, url, output, category,delay) for url in urls]
             
             for future in as_completed(futures):
                 try:
@@ -147,17 +212,17 @@ class Parser:
                     break  # Stop further execution in the thread pool if access is denied
 
 
-    def scrape(self, urls: list, multithreaded: bool = False) -> list:
+    def scrape(self, category: int, urls: list, multithreaded: bool = False) -> list:
         """Main scraping function."""
         
         output = []
         if multithreaded:
-            self._run_thread_pool(urls, output)
+            self._run_thread_pool(category, urls, output)
         else:
-            driver = self.browser()  # This is where you initialize your driver
+            driver = self.browser
             for url in urls:
                 try:
-                    self._worker(driver, url, output, random.randint(*self.delay_range))
+                    self._worker(driver, url, output, category, random.randint(*self.delay_range))
                 except AccessDeniedException:
                     print("Access Denied Exception raised. Stopping script.")
                     break  # Stop the loop when access is denied
