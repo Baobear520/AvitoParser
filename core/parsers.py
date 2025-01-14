@@ -13,8 +13,8 @@ from core.utilities import get_utc_timestamp, return_unique_records
 
 
 
-class Parser:
-    """Class for parsing data from Avito."""
+class BaseParser:
+    """Base class for parsing initial data from Avito."""
 
     def __init__(self, browser, base_url, max_workers=3, delay_range=(5, 15)):
         """
@@ -139,7 +139,7 @@ class Parser:
         return self._worker(driver, url, category.verbose_name, random.randint(*self.delay_range))
 
 
-    def fetch_objects(self, driver, total_goal, limit, location=False, max_scraping_failures=3):
+    def run(self, driver, total_goal, limit, location=False, max_scraping_failures=3):
         """
         Fetch objects dynamically until total_goal is met.
         :parameters:
