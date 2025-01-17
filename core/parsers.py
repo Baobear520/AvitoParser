@@ -5,6 +5,7 @@ import random
 from selenium.webdriver.remote.webdriver import WebDriver
 from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
+from faker import Faker
 
 from core.enums import CategoryType
 from core.exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
@@ -12,19 +13,16 @@ from core.utilities import get_utc_timestamp, return_unique_records
 
 
 
-
 class BaseParser:
     """Base class for parsing initial data from Avito."""
 
-    def __init__(self, browser, base_url, max_workers=3, delay_range=(5, 15)):
+    def __init__(self, browser, base_url, delay_range=(5, 15)):
         """
         Initialize the parser.
-        :param browser: Callable to produce browser instances.
-        :param max_workers: Number of threads to use in multithreading.
+        :param base_url: Base URL of the site.
         :param delay_range: Range of delays between requests.
         """
         self.browser = browser
-        self.max_workers = max_workers
         self.base_url = base_url
         self.delay_range = delay_range
 
@@ -49,7 +47,7 @@ class BaseParser:
             
             except (json.JSONDecodeError, TimeoutException, ValueError) as e:
                 attempts += 1
-                print(f"Attempt {attempts}/{max_attempts} failed for {url}")
+                print(f"Attempt {attempts}/{max_attempts} failed for {url}. Retrying...")
         raise MaxRetryAttemptsReachedException("Max retry attempts reached.")
 
 
@@ -130,8 +128,7 @@ class BaseParser:
             print(f"Unexpected error in worker for {url}: {e}")
             return []
 
-
-    def fetch_category_objects(self, driver, category, limit, offset, last_stamp, location):
+    def fetch_objects_for_category(self, driver, category, limit, offset, last_stamp, location):
         """Fetch objects for a specific category."""
 
         url = self.url_generator(category.category_id, limit, offset, last_stamp, location)
@@ -161,7 +158,7 @@ class BaseParser:
         while len(fetched_objects) < total_goal:
             try:
                 for category in CategoryType:
-                    new_objects = self.fetch_category_objects(driver, category, limit, offset, last_stamp, location)
+                    new_objects = self.fetch_objects_for_category(driver, category, limit, offset, last_stamp, location)
                     if new_objects:
                         scraping_failures_count = 0
                         fetched_objects.extend(new_objects)
@@ -190,7 +187,193 @@ class BaseParser:
         return return_unique_records(fetched_objects)
 
 
+class DailyParser(BaseParser):
+    def __init__(self, db, browser, base_url, user_count, delay_range=(5, 10)):
+        super().__init__(browser, base_url, delay_range)
+        self.db = db
+        self.user_count = user_count
+        self.faker = Faker()
 
+    def get_existing_object_ids(self, table_name, category_name):
+        """Fetch all existing object IDs for a given category."""
+        with self.db.conn as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(f"SELECT id FROM {table_name} WHERE category = %s;", (category_name,))
+                return {row[0] for row in cursor.fetchall()}
+
+    def check_for_unique_in_db(self, table_name, category_name):
+        """
+        Fetch unique objects from the database table for a specific category.
+
+        :param table_name: Name of the table to query (e.g., 'unique_records' or 'objects').
+        :param category_name: The category to filter objects by.
+        :return: List of objects from the specified table matching the category.
+        """
+        try:
+            with self.db.conn as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"""
+                        SELECT id, category, type, title, price, price_for, location, photo_URLs, source_URL, last_updated
+                        FROM {table_name}
+                        WHERE category = %s;
+                    """, (category_name,))
+                    rows = cursor.fetchall()
+
+                    # Convert rows into dictionaries
+                    return [
+                        {
+                            'id': row[0],
+                            'category': row[1],
+                            'type': row[2],
+                            'title': row[3],
+                            'price': row[4],
+                            'price_for': row[5],
+                            'location': row[6],
+                            'photo_URLs': row[7],
+                            'source_URL': row[8],
+                            'last_updated': row[9]
+                        }
+                        for row in rows
+                    ]
+        except Exception as e:
+            print(f"Error fetching unique objects from {table_name}: {e}")
+            return []
+
+
+    def remove_assigned_objects_from_unique_records(self, table_name, assigned_object_ids):
+        """Batch removal of assigned objects from unique_records."""
+        if not assigned_object_ids:
+            return
+        with self.db.conn as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(f"""
+                    DELETE FROM {table_name}
+                    WHERE id = ANY(%s);
+                """, (list(assigned_object_ids),))
+            print(f"Removed {len(assigned_object_ids)} objects from '{table_name}'.")
+
+    def generate_user_data(self):
+        """Generate random user data."""
+        gender = self.faker.random_element(["M", "F"])
+        return {
+            "username": self.faker.user_name(),
+            "phone_number": self.faker.phone_number()[:32],  # Truncate to avoid VARCHAR(32) overflow
+            "email": self.faker.email(),
+            "first_name": self.faker.first_name_male() if gender == "M" else self.faker.first_name_female(),
+            "last_name": self.faker.last_name(),
+            "address": self.faker.address(),
+            "gender": gender,
+        }
+
+    def save_user_and_objects(self, user_data, assigned_objects):
+        """Save user and assigned objects in a single transaction."""
+        try:
+            with self.db.conn as conn:
+                with conn.cursor() as cursor:
+                    conn.autocommit = False
+
+                    # Save user
+                    cursor.execute("""
+                        INSERT INTO users (username, phone_number, email, first_name, last_name, address, gender)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id;
+                    """, (
+                        user_data['username'],
+                        user_data['phone_number'],
+                        user_data['email'],
+                        user_data['first_name'],
+                        user_data['last_name'],
+                        user_data['address'],
+                        user_data['gender']
+                    ))
+
+                    user_id = cursor.fetchone()[0]
+
+                    # Update assigned objects with user_id
+                    object_ids = [obj['id'] for obj in assigned_objects]
+                    cursor.execute("""
+                        UPDATE objects
+                        SET user_id = %s
+                        WHERE id = ANY(%s);
+                    """, (user_id, object_ids))
+
+                    conn.commit()
+                    print(f"Saved user {user_data['username']} and assigned {len(object_ids)} objects.")
+        except Exception as e:
+            print(f"Error saving user and objects: {e}")
+            if conn:
+                conn.rollback()
+
+    def run(self, driver, total_goal, limit, location=False,max_scraping_failures=3):
+        """Main logic to generate users, assign objects, and manage unique_records.
+
+        - Generate users
+        - Assign objects to users
+        - Remove assigned objects from unique_records
+        - Save user and assigned objects
+
+        :param driver: Selenium WebDriver
+        :param total_goal: Total number of objects for a user per category
+        :param limit: Number of objects per API call
+        :param location: Location filter for the request
+        :param max_scraping_failures: Maximum number of consecutive zero-fetch attempts
+
+        """
+        for user in range(self.user_count):
+            user_data = self.generate_user_data()
+            print(f"Generating user {user_data['username']}...")
+            assigned_objects_per_user = []
+
+            for category in CategoryType:
+                print(f"Current category: {category.verbose_name}")
+                assigned_objects_per_category = []
+                unique_objects = self.check_for_unique_in_db('unique_records', category.verbose_name)
+
+                if unique_objects:
+                    print(f"Found {len(unique_objects)} unique objects for {category.verbose_name}.")
+                    objects_to_assign = unique_objects[:total_goal]
+                    assigned_objects_per_category.extend(objects_to_assign)
+                    assigned_objects_per_user.extend(objects_to_assign)
+                    # Remove assigned objects from unique_records
+                    print(f"Assigned {len(objects_to_assign)} objects for {category.verbose_name}.")
+                    self.remove_assigned_objects_from_unique_records('unique_records', [obj['id'] for obj in objects_to_assign])
+
+                    print(f"Done for {category.verbose_name}.")
+                    print("-" * 50)
+                else:
+                    print(f"No unique objects for {category.verbose_name}. Fetching new objects...")
+                    offset = 0
+                    last_stamp = get_utc_timestamp()
+                    while len(assigned_objects_per_category) < total_goal:
+                        new_objects = self.fetch_objects_for_category(driver, category, limit, offset, last_stamp, location)
+                        print(f"Fetched {len(new_objects)} new objects for {category.verbose_name}.")
+                        existing_ids = self.get_existing_object_ids('objects', category.verbose_name)
+                        # Filter out existing objects
+                        unique_objects = [obj for obj in new_objects if obj['id'] not in existing_ids]
+                        print(f"Filtered {len(unique_objects)} unique objects for {category.verbose_name}.")
+
+                        if unique_objects:
+                            objects_to_assign = unique_objects[:total_goal]
+                            print(f"Assigning {len(objects_to_assign)} objects for {category.verbose_name}.")
+                            assigned_objects_per_category.extend(objects_to_assign)
+                            assigned_objects_per_user.extend(objects_to_assign)
+
+                            remaining_objects = unique_objects[total_goal:]
+                            print(f"Remaining {len(remaining_objects)} unique objects for {category.verbose_name} after assignment.")
+
+                            print(f"Saving {len(remaining_objects)} unique objects for {category.verbose_name} into the 'unique_records'...")
+                            self.db.save_to_db('unique_records', remaining_objects)
+
+                            print(f"Saving {len(objects_to_assign)} objects for {category.verbose_name} into the 'objects'.")
+                            self.db.save_to_db('objects', objects_to_assign)
+                            print(f'Done for {category.verbose_name}')
+                            print("-" * 50)
+                            break
+                        print(f"No more unique objects for {category.verbose_name}.\nMaking another API call...")
+                        offset += limit
+
+            self.save_user_and_objects(user_data, assigned_objects_per_user)
+            print(f"Done for user {user_data['username']}.")
+            print("*" * 50)
 
 
 

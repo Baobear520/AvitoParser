@@ -5,7 +5,6 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException
 
-
 class ChromeBrowser:
     """ A class for initializing base Chrome webdriver"""
 
@@ -56,7 +55,7 @@ class ChromeBrowser:
 class UndetectedChromeBrowser(ChromeBrowser):
     """ A class for initializing undetected Chrome webdriver"""
 
-    
+
     def get_driver(self):
 
         # Initialize the Chrome driver
@@ -68,7 +67,7 @@ class UndetectedChromeBrowser(ChromeBrowser):
             print(f"Driver object {driver} has been initialized.")
             return driver
         
-        except TimeoutException:
+        except TimeoutException as e:
             print(f"Couldn't load the page source.")
             raise e
         except Exception as e:
