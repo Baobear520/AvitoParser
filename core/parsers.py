@@ -330,7 +330,7 @@ class DailyParser(BaseParser):
 
                 if unique_objects:
                     print(f"Found {len(unique_objects)} unique objects for {category.verbose_name}.")
-                    objects_to_assign = unique_objects[:total_goal]
+                    objects_to_assign = unique_objects[:(min(total_goal, len(unique_objects)))]
                     assigned_objects_per_category.extend(objects_to_assign)
                     assigned_objects_per_user.extend(objects_to_assign)
                     # Remove assigned objects from unique_records
@@ -352,7 +352,7 @@ class DailyParser(BaseParser):
                         print(f"Filtered {len(unique_objects)} unique objects for {category.verbose_name}.")
 
                         if unique_objects:
-                            objects_to_assign = unique_objects[:total_goal]
+                            objects_to_assign = unique_objects[:min(total_goal, len(unique_objects))]
                             print(f"Assigning {len(objects_to_assign)} objects for {category.verbose_name}.")
                             assigned_objects_per_category.extend(objects_to_assign)
                             assigned_objects_per_user.extend(objects_to_assign)
