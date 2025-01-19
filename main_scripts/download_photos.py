@@ -8,6 +8,7 @@ import aiofiles
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+from core.settings import BATCH_SIZE, DOWNLOAD_DIR, BASE_DIR
 from core.utilities import runtime_counter
 
 
@@ -157,10 +158,10 @@ def run_batch_downloads(batch, download_dir):
 @runtime_counter
 def main():
     # Example usage
-    file_path = "data/experiments/Электроника.csv"  # Replace with your file path
-    download_dir = "data/downloads"  # Replace with your download directory
+    file_path = os.path.join(BASE_DIR, "data", "experiments", "Электроника.csv") # Replace with your file path
+    download_dir = os.path.join(BASE_DIR, DOWNLOAD_DIR)  # Replace with your DOWNLOAD_DIR  # Replace with your download directory
     os.makedirs(download_dir, exist_ok=True)
-    batch_size = 10  # Number of records to process per batch
+    batch_size = BATCH_SIZE  # Number of records to process per batch
 
     download_images_in_batches(file_path, download_dir, batch_size)
 
