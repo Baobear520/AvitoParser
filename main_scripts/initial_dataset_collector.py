@@ -1,4 +1,3 @@
-import os
 
 import pandas as pd
 import psycopg2
@@ -6,7 +5,8 @@ import psycopg2
 from core.browsers import UndetectedChromeBrowser
 from core.parsers import BaseParser
 from core.utilities import runtime_counter, PandasHelper
-from core.db import PostgresDB, DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, DB_TABLE_NAME, PRODUCT_SCHEMA
+from core.db import PostgresDB
+from core.settings import DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, OBJECT_SCHEMA, LIMIT, BASE_URL
 
 
 @runtime_counter
@@ -17,8 +17,8 @@ def main():
         # db.create_table(DB_TABLE_NAME,PRODUCT_SCHEMA)
 
         browser = UndetectedChromeBrowser()
-        parser = BaseParser(browser, base_url="https://www.avito.ru/web/1/main/items")
-        data = parser.run(driver=browser.get_driver(), total_goal=1200, limit=300)
+        parser = BaseParser(browser, base_url=BASE_URL)
+        data = parser.run(driver=browser.get_driver(), total_goal=1200, limit=LIMIT)
 
 
         #db.save_to_db(DB_TABLE_NAME, data)
