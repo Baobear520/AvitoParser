@@ -1,50 +1,9 @@
 import psycopg2
 from psycopg2.extras import execute_values
 
-DB_HOST = 'localhost'
-DB_PORT='5432'
-DB_USER = 'aldmikon'
-DB_PASSWORD = '123'
-DB_NAME = 'test_app'
+from core.settings import (
+    DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, OBJECT_SCHEMA, UNIQUE_RECORD_SCHEMA, USER_SCHEMA)
 
-
-OBJECT_SCHEMA = {
-    "id": "BIGINT PRIMARY KEY",
-    "category": "VARCHAR(64)",
-    "type": "VARCHAR(64)",
-    "title": "VARCHAR(256)",
-    "price": "TEXT",
-    "price_for": "VARCHAR(64)",
-    "location": "VARCHAR(256)",
-    "photo_URLs": "TEXT[]",
-    "source_URL": "VARCHAR(256)",
-    "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-    'user_id': 'BIGINT'
-}
-UNIQUE_RECORD_SCHEMA = {
-    "id": "BIGINT PRIMARY KEY",
-    "category": "VARCHAR(64)",
-    "type": "VARCHAR(64)",
-    "title": "VARCHAR(256)",
-    "price": "TEXT",
-    "price_for": "VARCHAR(64)",
-    "location": "VARCHAR(256)",
-    "photo_URLs": "TEXT[]",
-    "source_URL": "VARCHAR(256) UNIQUE",  # Ensuring source_URL is unique
-    "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
-}
-USER_SCHEMA = {
-    "id": "BIGSERIAL PRIMARY KEY",
-    "username": "TEXT UNIQUE",
-    "phone_number": "VARCHAR(32) UNIQUE",
-    "email": "VARCHAR(64)",
-    "first_name": "VARCHAR(64)",
-    "last_name": "VARCHAR(64)",
-    "address": "VARCHAR(256)",
-    "gender": "CHAR(2)",
-    "property": "BIGINT",
-    "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-}
 
 
 class PostgresDB:
@@ -78,6 +37,7 @@ class PostgresDB:
         :param unique_constraints: List of column names that should be unique.
         :param other_constraints: List of other constraints (e.g., CHECK constraints, NOT NULL).
         """
+
         # Define columns and their types
         columns = ", ".join([f"{col_name} {col_type}" for col_name, col_type in schema.items()])
 
