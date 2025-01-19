@@ -1,7 +1,11 @@
+import os
+
+from dotenv import load_dotenv
+from pathlib import Path
 
 """ Settings for the application """
-import os
-from pathlib import Path
+
+load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -19,14 +23,14 @@ BATCH_SIZE = 10
 DOWNLOAD_DIR = "data/downloads/photos"
 
 # Postgres settings (set your own)
-DB_HOST = 'localhost'
-DB_PORT='5432'
-DB_USER = 'aldmikon'
-DB_PASSWORD = '123'
-DB_NAME = 'test_app'
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT=os.getenv('DB_PORT', '5432')
+DB_USER = os.getenv('DB_USER')
+DB_PASSWORD = os.getenv('DB_PASSWORD')
+DB_NAME = os.getenv('DB_NAME')
 
 # Table schemas
-OBJECT_SCHEMA = {
+OBJECT_SCHEMA={
     "id": "BIGINT PRIMARY KEY",
     "category": "VARCHAR(64)",
     "type": "VARCHAR(64)",
@@ -39,9 +43,9 @@ OBJECT_SCHEMA = {
     "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
     'user_id': 'BIGINT'
 }
-OBJECT_CONSTRAINTS = ['source_URL']
+OBJECT_CONSTRAINTS=['source_URL']
 
-UNIQUE_RECORD_SCHEMA = {
+UNIQUE_RECORD_SCHEMA={
     "id": "BIGINT PRIMARY KEY",
     "category": "VARCHAR(64)",
     "type": "VARCHAR(64)",
@@ -53,9 +57,9 @@ UNIQUE_RECORD_SCHEMA = {
     "source_URL": "VARCHAR(256) UNIQUE",
     "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
 }
-UNIQUE_RECORDS_CONSTRAINTS = ['source_URL']
+UNIQUE_RECORDS_CONSTRAINTS=['source_URL']
 
-USER_SCHEMA = {
+USER_SCHEMA={
     "id": "BIGSERIAL PRIMARY KEY",
     "username": "TEXT UNIQUE",
     "phone_number": "VARCHAR(32) UNIQUE",
@@ -67,6 +71,8 @@ USER_SCHEMA = {
     "property": "BIGINT",
     "last_updated": "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
 }
-USER_CONSTRAINTS = ['username', 'phone_number']
-USER_FK = [('property', 'objects', 'id')]
+USER_CONSTRAINTS=['username', 'phone_number']
+USER_FK=[('property', 'objects', 'id')]
 
+
+print(DB_PASSWORD)
