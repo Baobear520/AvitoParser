@@ -4,9 +4,10 @@
 /.idea/
 .venv
 __pycache__
-data
+data/
 test.py
 test2.py
 .DS_Store
 .env
-
+apts/
+cars/
