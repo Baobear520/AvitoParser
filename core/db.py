@@ -37,6 +37,9 @@ class PostgresDB:
         :param unique_constraints: List of column names that should be unique.
         :param other_constraints: List of other constraints (e.g., CHECK constraints, NOT NULL).
         """
+        if self.check_table_exists(table_name):
+            print(f"Table '{table_name}' already exists. Skipping...")
+            return
 
         # Define columns and their types
         columns = ", ".join([f"{col_name} {col_type}" for col_name, col_type in schema.items()])
@@ -84,6 +87,24 @@ class PostgresDB:
         except Exception as e:
             print(f"{type(e).__name__} occurred during table creation: {e}")
 
+    def check_table_exists(self, table_name):
+        """
+        Checks if a table exists in the database.
+        :param table_name: Name of the table.
+        :return: True if the table exists, False otherwise.
+        """
+        try:
+            with self.__connect() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(f"SELECT EXISTS (SELECT FROM pg_tables WHERE tablename = '{table_name}');")
+                    return cursor.fetchone()[0]
+        except psycopg2.Error as e:
+            print(f"Error during table existence check: {e}")
+        except Exception as e:
+            print(f"{type(e).__name__} occurred during table existence check: {e}")
+        return False
+
+
 
     def save_to_db(self, table_name, data):
         """
@@ -94,6 +115,12 @@ class PostgresDB:
         if not data:
             print("No data to save.")
             return
+
+        # Validate table name
+        if not self.check_table_exists(table_name):
+            print(f"Table '{table_name}' does not exist.")
+            return
+
 
         # Extract columns and values from the first row of data
         columns = data[0].keys()
