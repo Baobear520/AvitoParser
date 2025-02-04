@@ -1,10 +1,6 @@
 import psycopg2
 from psycopg2.extras import execute_values
 
-from core.settings import (
-    DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, OBJECT_SCHEMA, UNIQUE_RECORD_SCHEMA, USER_SCHEMA)
-
-
 
 class PostgresDB:
     """ A class for Postgres database operations. """
@@ -27,22 +23,33 @@ class PostgresDB:
             port=self.port
         )
 
-    def create_table(self, table_name, schema, foreign_keys=None, unique_constraints=None, other_constraints=None):
+    def create_table(self, schema):
         """
         Creates a table based on the provided schema, with optional foreign keys and constraints.
 
-        :param table_name: Name of the table.
-        :param schema: Dictionary defining column names and types.
-        :param foreign_keys: List of tuples defining foreign key relationships (column_name, referenced_table, referenced_column).
-        :param unique_constraints: List of column names that should be unique.
-        :param other_constraints: List of other constraints (e.g., CHECK constraints, NOT NULL).
+        Args:
+            schema (dict): A dictionary representing the table schema, with keys:
+                - columns (dict): A dictionary mapping column names to column types.
+                - foreign_keys (list): A list of foreign key constraints, each containing three elements:
+                    column name, referenced table name, and referenced column name.
+                - unique_constraints (list): A list of unique constraint columns.
+
+
+        Returns:
+            None
+
         """
+        table_name = schema['table_name']
+        columns = schema['columns']
+        foreign_keys = schema.get('foreign_keys', [])
+        unique_constraints = schema.get('constraints', [])
+
         if self.check_table_exists(table_name):
             print(f"Table '{table_name}' already exists. Skipping...")
             return
 
         # Define columns and their types
-        columns = ", ".join([f"{col_name} {col_type}" for col_name, col_type in schema.items()])
+        columns = ", ".join([f"{col_name} {col_type}" for col_name, col_type in columns.items()])
 
         # Define foreign keys (if any)
         if foreign_keys:
@@ -60,11 +67,11 @@ class PostgresDB:
         else:
             unique_constraints_clause = ""
 
-        # Define other constraints (if any)
-        if other_constraints:
-            other_constraints_clause = f", {', '.join(other_constraints)}"
-        else:
-            other_constraints_clause = ""
+        # # Define other constraints (if any)
+        # if other_constraints:
+        #     other_constraints_clause = f", {', '.join(other_constraints)}"
+        # else:
+        #     other_constraints_clause = ""
 
         # Combine all clauses
         create_query = f"""
@@ -72,13 +79,12 @@ class PostgresDB:
             {columns}
             {foreign_keys_clause}
             {unique_constraints_clause}
-            {other_constraints_clause}
         );
         """
 
         # Execute the query to create the table
         try:
-            with self.__connect() as conn:
+            with self.conn as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(create_query)
                     print(f"Table '{table_name}' created successfully (if not existed).")
@@ -87,6 +93,35 @@ class PostgresDB:
         except Exception as e:
             print(f"{type(e).__name__} occurred during table creation: {e}")
 
+    def create_indexes(self, table_name, indexes):
+        """
+        Creates indexes for the specified table.
+
+        :param table_name: Name of the table.
+        :param indexes: List of column names or (column_name, index_name) for indexing.
+        """
+        if not indexes:
+            print("No indexes provided.")
+            return
+
+        try:
+            with self.conn as conn:
+                with conn.cursor() as cursor:
+                    for index in indexes:
+                        # If index name is not provided, generate a default name
+                        if len(index) == 1:
+                            index_name = f"idx_{index[0]}"
+                        else:
+                            index_name = index[1]
+
+                        index_query = f"CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({index[0]});"
+                        cursor.execute(index_query)
+                        print(f"Index '{index_name}' created for column '{index[0]}' in table '{table_name}'.")
+        except psycopg2.Error as e:
+            print(f"Error during index creation: {e}")
+        except Exception as e:
+            print(f"{type(e).__name__} occurred during index creation: {e}")
+
     def check_table_exists(self, table_name):
         """
         Checks if a table exists in the database.
@@ -94,7 +129,7 @@ class PostgresDB:
         :return: True if the table exists, False otherwise.
         """
         try:
-            with self.__connect() as conn:
+            with self.conn as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(f"SELECT EXISTS (SELECT FROM pg_tables WHERE tablename = '{table_name}');")
                     return cursor.fetchone()[0]
@@ -134,7 +169,7 @@ class PostgresDB:
                         """
 
         try:
-            with self.__connect() as conn:
+            with self.conn as conn:
                 with conn.cursor() as cursor:
                     execute_values(cursor, insert_query, values)
                     print(f"Inserted/Updated {len(data)} rows into '{table_name}'.")
@@ -142,6 +177,35 @@ class PostgresDB:
             print(f"Error during data insertion: {e}")
         except Exception as e:
             print(f"{type(e).__name__} occurred during insertion: {e}")
+
+    def read_from_db(self, table_name, columns=None):
+        """Read data from the specified table. Optionally specify columns to fetch."""
+        if not self.check_table_exists(table_name):
+            print(f"Table '{table_name}' does not exist.")
+            return
+
+        # Determine which columns to select
+        if columns is None:
+            # If no columns are specified, select all columns
+            query = f"SELECT * FROM {table_name};"
+        else:
+            # If specific columns are provided, use them in the SELECT statement
+            columns_str = ", ".join(columns)
+            query = f"SELECT {columns_str} FROM {table_name};"
+
+        try:
+            with self.conn as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    if not rows:
+                        print(f"No records found in table '{table_name}'.")
+                    return rows
+        except psycopg2.Error as e:
+            print(f"Error during data read: {e}")
+        except Exception as e:
+            print(f"{type(e).__name__} occurred during read: {e}")
+
 
     def check_for_unique_in_db(self, table_name, category_name):
         """Fetch unique objects from the 'unique_records' table for a specific category."""
@@ -191,61 +255,3 @@ class PostgresDB:
             print(f"Error fetching unique objects from {table_name}: {e}")
             return []
 
-
-
-def main():
-    db = PostgresDB(host=DB_HOST, user=DB_USER, port=DB_PORT, password=DB_PASSWORD, db_name=DB_NAME)
-
-    # Create 'objects' table
-    unique_constraints = ['source_URL']
-    db.create_table("objects", OBJECT_SCHEMA, unique_constraints=unique_constraints)
-    
-    # Create 'unique_records' table
-    unique_constraints = ['source_URL']
-    db.create_table("unique_records", UNIQUE_RECORD_SCHEMA, unique_constraints=unique_constraints)
-
-
-
-    # Create 'users' table
-    foreign_keys_users = [("property", "objects", "id")]
-    unique_constraints = ['phone_number']
-    db.create_table("users", USER_SCHEMA, foreign_keys=foreign_keys_users, unique_constraints=unique_constraints)
-
-    objects_data = [
-        {
-            "id": 1,
-            "category": "real_estate",
-            "type": "apartment",
-            "owner": "John Doe",
-            "title": "Beautiful Apartment",
-            "price": 500000,
-            "price_for": "rent",
-            "location": "New York, USA",
-            "photo_URLs": ["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"],
-            "source_URL": "https://www.example.com/apartment",
-            "last_updated": "2023-07-01 12:00:00"
-        }
-    ]
-    user_data = [
-        {
-            "username": "johndoe",
-            "phone_number": "1234567890",
-            "email": "3Xg3O@example.com",
-            "first_name": "John",
-            "last_name": "Doe",
-            "address": "123 Main St, Anytown, USA",
-            "gender": "male",
-            "property": 1,
-            "last_updated": "2023-07-01 12:00:00"
-
-        }
-    ]
-    db.save_to_db("objects", objects_data)
-    db.save_to_db("unique_records", objects_data)
-    db.save_to_db("users", user_data)
-
-
-
-
-if __name__ == "__main__":
-    main()
