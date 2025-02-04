@@ -2,13 +2,12 @@
 import random
 import time
 
-from core.browsers import UndetectedChromeBrowser, ChromeBrowser
-from core.db import PostgresDB, DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, USER_SCHEMA, \
-    UNIQUE_RECORD_SCHEMA, OBJECT_SCHEMA
+from core.browsers import ChromeBrowser
+from core.db import PostgresDB
 
 from core.parsers import DailyParser
-from core.settings import BASE_URL, LIMIT, OBJECT_CONSTRAINTS, UNIQUE_RECORDS_CONSTRAINTS, USER_CONSTRAINTS, USER_FK, \
-    USER_COUNT_RANGE, OBJECT_COUNT_RANGE
+from core.settings import BASE_URL, LIMIT, DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, DB_SCHEMA, USER_COUNT_RANGE, \
+    OBJECT_COUNT_RANGE
 from core.utilities import runtime_counter
 
 """
@@ -65,14 +64,18 @@ def main():
         db_name=DB_NAME
     )
     # Initialize the database
-    # Create 'objects' table
-    db.create_table("objects", OBJECT_SCHEMA, unique_constraints=OBJECT_CONSTRAINTS)
+    # Create tables
+    # Create tables
+    for table_name, schema in DB_SCHEMA.items():
+        print(f"Creating table: {table_name}")
+        db.create_table(schema)
 
-    # Create 'unique_records' table
-    db.create_table("unique_records", UNIQUE_RECORD_SCHEMA, unique_constraints=UNIQUE_RECORDS_CONSTRAINTS)
+    # Create indexes
+    for table_name, schema in DB_SCHEMA.items():
+        print(f"Creating indexes for table: {table_name}")
+        db.create_indexes(table_name, indexes=schema.get('indexes', []))
 
-    # Create 'users' table
-    db.create_table("users", USER_SCHEMA, foreign_keys=USER_FK, unique_constraints=USER_CONSTRAINTS)
+
     print("Database initialized.")
     print("*" * 50)
 
