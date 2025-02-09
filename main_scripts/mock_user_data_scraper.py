@@ -65,7 +65,6 @@ def main():
     )
     # Initialize the database
     # Create tables
-    # Create tables
     for table_name, schema in DB_SCHEMA.items():
         print(f"Creating table: {table_name}")
         db.create_table(schema)

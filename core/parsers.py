@@ -11,7 +11,7 @@ from core.enums import CategoryType
 from core.exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
 from core.utilities import get_utc_timestamp, return_unique_records
 
-
+from main_scripts.download_photos import download_and_save_photos
 
 class BaseParser:
     """Base class for parsing initial data from Avito."""
@@ -371,11 +371,14 @@ class DailyParser(BaseParser):
                         print(f"No more unique objects for {category.verbose_name}.\nMaking another API call...")
                         offset += limit
 
+            # Save user and assigned objects
             self.save_user_and_objects(user_data, assigned_objects_per_user)
+            print(f"Saved user {user_data['username']} and assigned {len(assigned_objects_per_user)} objects.")
+            # Downloading photos and saving to the database
+            download_and_save_photos(assigned_objects_per_user)
+            print(f"All photos for {user_data['username']} downloaded and saved to the database.")
             print(f"Done for user {user_data['username']}.")
             print("*" * 50)
-
-
 
 
 

@@ -241,15 +241,7 @@ class Downloader:
 
 
 # Main function to run the batch download
-async def main():
-    # Example usage
-    # source_db = {
-    #     'host':DB_HOST,
-    #     'user':DB_USER,
-    #     'port':DB_PORT,
-    #     'password':DB_PASSWORD,
-    #     'database':DB_NAME
-    # }
+def download_and_save_photos(source):
     output_db = {
         'host': DB_HOST,
         'user': DB_USER,
@@ -257,14 +249,11 @@ async def main():
         'password': DB_PASSWORD,
         'database': 'photos'
     }
-
-    downloader = Downloader(
-        source_file='apts_dataset.csv',
-        output_db=output_db
+    asyncio.run(
+        Downloader(
+            source_obj=source,
+            output_db=output_db
+    ).run()
     )
 
-    await downloader.run()
 
-
-if __name__ == "__main__":
-    asyncio.run(main())
