@@ -197,13 +197,20 @@ class Downloader:
         # Acquire a connection from the pool
         async with self.pool.acquire() as conn:
             async with conn.transaction():
-                query = """
+                create_table_query = """
+                CREATE TABLE IF NOT EXISTS images (
+                    id BIGSERIAL PRIMARY KEY,
+                    filename VARCHAR(255) UNIQUE,
+                    image_data BYTEA
+                );
+                """
+                await conn.execute(create_table_query)
+
+                insert_query = """
                 INSERT INTO images (filename, image_data)
                 VALUES ($1, $2) ON CONFLICT (filename) DO NOTHING;
                 """
-
-                # Perform the batch insert using executemany (this works for multiple rows)
-                await conn.executemany(query, image_records)
+                await conn.executemany(insert_query, image_records)
             await conn.close()
             print(f"Successfully inserted/updated {len(image_records)} records into the database.")
 

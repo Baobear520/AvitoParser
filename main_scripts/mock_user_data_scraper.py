@@ -74,13 +74,11 @@ def main():
         print(f"Creating indexes for table: {table_name}")
         db.create_indexes(table_name, indexes=schema.get('indexes', []))
 
-
     print("Database initialized.")
     print("*" * 50)
 
     browser = ChromeBrowser(headless=True)
     driver = browser.get_driver()
-
 
     # App configuration
     user_count = random.randint(*USER_COUNT_RANGE)
@@ -104,7 +102,6 @@ def main():
         total_goal=total_goal,
         limit=LIMIT
     )
-
 
 if __name__ == "__main__":
         try:
