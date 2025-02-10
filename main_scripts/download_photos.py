@@ -6,12 +6,15 @@ import aiohttp
 import aiofiles
 import asyncpg
 
-from core.settings import BATCH_SIZE, DOWNLOAD_DIR, BASE_DIR, DB_HOST, DB_USER, DB_PASSWORD
+from core.settings import DOWNLOAD_DIR, BASE_DIR, DB_HOST, DB_USER, DB_PASSWORD
 
 
 
 class Downloader:
-    def __init__(self, source_db=None, source_file=None, source_obj=None, output_db=None):
+    def __init__(
+            self, batch_size, source_db=None, source_file=None, source_obj=None, output_db=None
+    ):
+        self.batch_size = batch_size
         self.session = None
         self.source_db = source_db
         self.source_file = source_file
@@ -21,7 +24,7 @@ class Downloader:
         if not self.output_db:
             self.output_directory = DOWNLOAD_DIR
             os.makedirs(self.output_directory,exist_ok=True)
-        self.batch_size = BATCH_SIZE
+
 
     async def init_session(self):
         """Initialize the session inside the event loop."""
@@ -222,24 +225,26 @@ class Downloader:
         await asyncio.gather(*tasks)
 
 
-    async def manage_batch_tasks(self, records):
-
+    async def manage_batch_tasks(self):
+        records = await self.get_objects_from_source()
         num_of_total_records = len(records)
         print(f"Total records: {num_of_total_records}")
 
         # Split records into batches
+        batch_tasks = []
         for i in range(0, num_of_total_records, self.batch_size):
             batch = records[i:i + self.batch_size]
             print(f"Batch {i // self.batch_size + 1} of {num_of_total_records // self.batch_size + 1} started.")
-            await self.run_batch_downloads(batch)
+            batch_tasks.append(self.run_batch_downloads(batch))
+
+        await asyncio.gather(*batch_tasks)
 
 
     async def run(self):
         try:
-            records = await self.get_objects_from_source()
             await self.init_session()
             await self.create_pool()
-            await self.manage_batch_tasks(records)
+            await self.manage_batch_tasks()
         finally:
             await self.close_session()
             await self.close_pool()
@@ -248,7 +253,7 @@ class Downloader:
 
 
 # Main function to run the batch download
-def download_and_save_photos(source):
+def download_and_save_photos(batch_size, source):
     output_db = {
         'host': DB_HOST,
         'user': DB_USER,
@@ -258,6 +263,7 @@ def download_and_save_photos(source):
     }
     asyncio.run(
         Downloader(
+            batch_size=batch_size,
             source_obj=source,
             output_db=output_db
     ).run()

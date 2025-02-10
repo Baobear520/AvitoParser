@@ -373,9 +373,9 @@ class DailyParser(BaseParser):
 
             # Save user and assigned objects
             self.save_user_and_objects(user_data, assigned_objects_per_user)
-            print(f"Saved user {user_data['username']} and assigned {len(assigned_objects_per_user)} objects.")
+
             # Downloading photos and saving to the database
-            download_and_save_photos(assigned_objects_per_user)
+            download_and_save_photos(batch_size=total_goal, source=assigned_objects_per_user)
             print(f"All photos for {user_data['username']} downloaded and saved to the database.")
             print(f"Done for user {user_data['username']}.")
             print("*" * 50)

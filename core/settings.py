@@ -19,8 +19,7 @@ USER_COUNT_RANGE = (5,20) # Number of users to parse
 OBJECT_COUNT_RANGE = (1,5) # Number of objects to parse
 
 # Photo download settings
-BATCH_SIZE = 10
-DOWNLOAD_DIR = "data/downloads/photos"
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "data", "downloads", "photos") #"data/downloads/photos"
 
 # Postgres settings (set your own)
 DB_HOST = os.getenv('DB_HOST', 'localhost')
