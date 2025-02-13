@@ -1,3 +1,5 @@
+import io
+
 from minio import Minio
 from minio.error import S3Error
 
@@ -5,11 +7,11 @@ from minio.error import S3Error
 def create_image_key(record, counter=1):
     # Generate a unique key for the image
     user_id = record['user_id']
-    object_id = record['object_id']
+    object_id = record['id']
 
     # Construct the object key based on user and object
-    image_key = f"user{user_id}/object{object_id}/image_{counter}.jpg"
-
+    image_key = f"user-{user_id}/object-{object_id}/image-{counter}.jpg"
+    print(f"Image key: {image_key} has been created")
     return image_key
 
 
