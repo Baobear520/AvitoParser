@@ -9,9 +9,25 @@ from faker import Faker
 
 from core.utilities.enums import CategoryType
 from core.exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
-from core.utilities import get_utc_timestamp, return_unique_records
+from core.utilities.other_functions import get_utc_timestamp, return_unique_records
 
 from main_scripts.download_photos import download_and_save_photos
+
+
+def generate_user_data():
+    """Generate random user data."""
+    faker = Faker()
+    gender = faker.random_element(["M", "F"])
+    return {
+        "username": faker.user_name(),
+        "phone_number": faker.phone_number()[:32],  # Truncate to avoid VARCHAR(32) overflow
+        "email": faker.email(),
+        "first_name": faker.first_name_male() if gender == "M" else faker.first_name_female(),
+        "last_name": faker.last_name(),
+        "address": faker.address(),
+        "gender": gender,
+    }
+
 
 class BaseParser:
     """Base class for parsing initial data from Avito."""
@@ -192,7 +208,7 @@ class DailyParser(BaseParser):
         super().__init__(browser, base_url, delay_range)
         self.db = db
         self.user_count = user_count
-        self.faker = Faker()
+
 
     def get_existing_object_ids(self, table_name, category_name):
         """Fetch all existing object IDs for a given category."""
@@ -252,19 +268,6 @@ class DailyParser(BaseParser):
                 """, (list(assigned_object_ids),))
             print(f"Removed {len(assigned_object_ids)} objects from '{table_name}'.")
 
-    def generate_user_data(self):
-        """Generate random user data."""
-        gender = self.faker.random_element(["M", "F"])
-        return {
-            "username": self.faker.user_name(),
-            "phone_number": self.faker.phone_number()[:32],  # Truncate to avoid VARCHAR(32) overflow
-            "email": self.faker.email(),
-            "first_name": self.faker.first_name_male() if gender == "M" else self.faker.first_name_female(),
-            "last_name": self.faker.last_name(),
-            "address": self.faker.address(),
-            "gender": gender,
-        }
-
     def save_user_and_objects(self, user_data, assigned_objects):
         """Save user and assigned objects in a single transaction."""
         try:
@@ -298,12 +301,14 @@ class DailyParser(BaseParser):
 
                     conn.commit()
                     print(f"Saved user {user_data['username']} and assigned {len(object_ids)} objects.")
+                    return user_id
         except Exception as e:
             print(f"Error saving user and objects: {e}")
             if conn:
                 conn.rollback()
+        return None
 
-    def run(self, driver, total_goal, limit, location=False,max_scraping_failures=3):
+    def run(self, driver, total_goal, limit, location=False, max_scraping_failures=3):
         """Main logic to generate users, assign objects, and manage unique_records.
 
         - Generate users
@@ -318,67 +323,59 @@ class DailyParser(BaseParser):
         :param max_scraping_failures: Maximum number of consecutive zero-fetch attempts
 
         """
-        for user in range(self.user_count):
-            user_data = self.generate_user_data()
-            print(f"Generating user {user_data['username']}...")
-            assigned_objects_per_user = []
+        assigned_objects_per_user = []
+        for category in CategoryType:
+            print(f"Current category: {category.verbose_name}")
+            assigned_objects_per_category = []
+            unique_objects = self.check_for_unique_in_db('unique_records', category.verbose_name)
 
-            for category in CategoryType:
-                print(f"Current category: {category.verbose_name}")
-                assigned_objects_per_category = []
-                unique_objects = self.check_for_unique_in_db('unique_records', category.verbose_name)
+            if unique_objects:
+                print(f"Found {len(unique_objects)} unique objects for {category.verbose_name}.")
+                objects_to_assign = unique_objects[:(min(total_goal, len(unique_objects)))]
+                assigned_objects_per_category.extend(objects_to_assign)
+                assigned_objects_per_user.extend(objects_to_assign)
+                # Remove assigned objects from unique_records
+                print(f"Assigned {len(objects_to_assign)} objects for {category.verbose_name}.")
+                self.remove_assigned_objects_from_unique_records('unique_records', [obj['id'] for obj in objects_to_assign])
 
-                if unique_objects:
-                    print(f"Found {len(unique_objects)} unique objects for {category.verbose_name}.")
-                    objects_to_assign = unique_objects[:(min(total_goal, len(unique_objects)))]
-                    assigned_objects_per_category.extend(objects_to_assign)
-                    assigned_objects_per_user.extend(objects_to_assign)
-                    # Remove assigned objects from unique_records
-                    print(f"Assigned {len(objects_to_assign)} objects for {category.verbose_name}.")
-                    self.remove_assigned_objects_from_unique_records('unique_records', [obj['id'] for obj in objects_to_assign])
+                print(f"Done for {category.verbose_name}.")
+                print("-" * 50)
+            else:
+                print(f"No unique objects for {category.verbose_name}. Fetching new objects...")
+                offset = 0
+                last_stamp = get_utc_timestamp()
+                while len(assigned_objects_per_category) < total_goal:
+                    new_objects = self.fetch_objects_for_category(driver, category, limit, offset, last_stamp, location)
+                    print(f"Fetched {len(new_objects)} new objects for {category.verbose_name}.")
+                    existing_ids = self.get_existing_object_ids('objects', category.verbose_name)
+                    # Filter out existing objects
+                    unique_objects = [obj for obj in new_objects if obj['id'] not in existing_ids]
+                    print(f"Filtered {len(unique_objects)} unique objects for {category.verbose_name}.")
 
-                    print(f"Done for {category.verbose_name}.")
-                    print("-" * 50)
-                else:
-                    print(f"No unique objects for {category.verbose_name}. Fetching new objects...")
-                    offset = 0
-                    last_stamp = get_utc_timestamp()
-                    while len(assigned_objects_per_category) < total_goal:
-                        new_objects = self.fetch_objects_for_category(driver, category, limit, offset, last_stamp, location)
-                        print(f"Fetched {len(new_objects)} new objects for {category.verbose_name}.")
-                        existing_ids = self.get_existing_object_ids('objects', category.verbose_name)
-                        # Filter out existing objects
-                        unique_objects = [obj for obj in new_objects if obj['id'] not in existing_ids]
-                        print(f"Filtered {len(unique_objects)} unique objects for {category.verbose_name}.")
+                    if unique_objects:
+                        objects_to_assign = unique_objects[:min(total_goal, len(unique_objects))]
+                        print(f"Assigning {len(objects_to_assign)} objects for {category.verbose_name}.")
+                        assigned_objects_per_category.extend(objects_to_assign)
+                        assigned_objects_per_user.extend(objects_to_assign)
 
-                        if unique_objects:
-                            objects_to_assign = unique_objects[:min(total_goal, len(unique_objects))]
-                            print(f"Assigning {len(objects_to_assign)} objects for {category.verbose_name}.")
-                            assigned_objects_per_category.extend(objects_to_assign)
-                            assigned_objects_per_user.extend(objects_to_assign)
+                        remaining_objects = unique_objects[total_goal:]
+                        print(f"Remaining {len(remaining_objects)} unique objects for {category.verbose_name} after assignment.")
 
-                            remaining_objects = unique_objects[total_goal:]
-                            print(f"Remaining {len(remaining_objects)} unique objects for {category.verbose_name} after assignment.")
+                        print(f"Saving {len(remaining_objects)} unique objects for {category.verbose_name} into the 'unique_records'...")
+                        self.db.save_to_db('unique_records', remaining_objects)
 
-                            print(f"Saving {len(remaining_objects)} unique objects for {category.verbose_name} into the 'unique_records'...")
-                            self.db.save_to_db('unique_records', remaining_objects)
+                        print(f"Saving {len(objects_to_assign)} objects for {category.verbose_name} into the 'objects'.")
+                        self.db.save_to_db('objects', objects_to_assign)
+                        print(f'Done for {category.verbose_name}')
+                        print("-" * 50)
+                        break
+                    print(f"No more unique objects for {category.verbose_name}.\nMaking another API call...")
+                    offset += limit
 
-                            print(f"Saving {len(objects_to_assign)} objects for {category.verbose_name} into the 'objects'.")
-                            self.db.save_to_db('objects', objects_to_assign)
-                            print(f'Done for {category.verbose_name}')
-                            print("-" * 50)
-                            break
-                        print(f"No more unique objects for {category.verbose_name}.\nMaking another API call...")
-                        offset += limit
+                assigned_objects_per_user.extend(assigned_objects_per_category)
 
-            # Save user and assigned objects
-            self.save_user_and_objects(user_data, assigned_objects_per_user)
+        return assigned_objects_per_user
 
-            # Downloading photos and saving to the database
-            download_and_save_photos(batch_size=total_goal, source=assigned_objects_per_user)
-            print(f"All photos for {user_data['username']} downloaded and saved to the database.")
-            print(f"Done for user {user_data['username']}.")
-            print("*" * 50)
 
 
 

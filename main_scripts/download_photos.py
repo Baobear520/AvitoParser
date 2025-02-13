@@ -9,10 +9,17 @@ import asyncpg
 from core.settings import DOWNLOAD_DIR, BASE_DIR, DB_HOST, DB_USER, DB_PASSWORD
 
 
+async def create_filename(record, counter):
+    # Create a unique filename with the domain name and counter
+    category = record['category']
+    record_id = record['id']
+    domain_name = f"{category.lower()}-{record_id}"
+    print(f"Filename: {domain_name}-{counter}.jpg")
+    return f"{domain_name}-{counter}.jpg"
 
 class Downloader:
     def __init__(
-            self, batch_size, source_db=None, source_file=None, source_obj=None, output_db=None
+            self, batch_size, source_db=None, source_file=None, source_obj=None, output_db=None, output_storage=None
     ):
         self.batch_size = batch_size
         self.session = None
@@ -21,7 +28,8 @@ class Downloader:
         self.source_obj = source_obj
         self.output_db = output_db
         self.pool = None
-        if not self.output_db:
+        self.output_storage = output_storage
+        if not self.output_db and not self.output_storage:
             self.output_directory = DOWNLOAD_DIR
             os.makedirs(self.output_directory,exist_ok=True)
 
@@ -142,14 +150,6 @@ class Downloader:
                 else:
                     print(f"No image data found for {filename}...")
 
-    async def create_filename(self, record, counter):
-        # Create a unique filename with the domain name and counter
-        category = record['category']
-        record_id = record['id']
-        domain_name = f"{category.lower()}-{record_id}"
-        print(f"Filename: {domain_name}-{counter}.jpg")
-        return f"{domain_name}-{counter}.jpg"
-
 
     # Create an async function to download an image with a domain name and counter
     async def download_image(self, record, url, counter):
@@ -166,7 +166,7 @@ class Downloader:
                 if response.status == 200:
                     image_data = await response.read()
                     print(f"Image data size for {url}: {len(image_data)}")
-                    filename = await self.create_filename(record, counter)
+                    filename = await create_filename(record, counter)
                     return filename, image_data
                 else:
                     print(f"Failed to download {url}: Status code {response.status}")

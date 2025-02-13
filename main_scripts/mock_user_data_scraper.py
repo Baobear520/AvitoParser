@@ -4,10 +4,11 @@ import random
 from core.browsers import ChromeBrowser
 from database.db import PostgresDB
 
-from core.parsers import DailyParser
+from core.parsers import DailyParser, generate_user_data
 from core.settings import BASE_URL, LIMIT, DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, DB_SCHEMA, USER_COUNT_RANGE, \
     OBJECT_COUNT_RANGE
 from core.utilities.other_functions import runtime_counter
+from main_scripts.download_photos import download_and_save_photos
 
 """
 Existing Unique Records in unique_objects:
@@ -95,11 +96,20 @@ def main():
     )
     print("Starting the daily parser...")
     print("*" * 50)
-    parser.run(
-        driver=driver,
-        total_goal=total_goal,
-        limit=LIMIT
-    )
+    for user in range(user_count):
+        user_data = generate_user_data()
+        print(f"Generating user {user_data['username']}...")
+
+        assigned_objects = parser.run(
+            driver=driver,
+            total_goal=total_goal,
+            limit=LIMIT
+        )
+        parser.save_user_and_objects(user_data, assigned_objects)
+        print(f"Done for user {user_data['username']}.")
+
+        download_and_save_photos(batch_size=total_goal,source=assigned_objects)
+        print("*" * 50)
 
 if __name__ == "__main__":
         try:
