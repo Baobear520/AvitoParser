@@ -7,7 +7,9 @@ import aiofiles
 import aiohttp
 import asyncpg
 
-from core.settings import DOWNLOAD_DIR, BASE_DIR
+from core.settings import DOWNLOAD_DIR, BASE_DIR, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+from core.utilities.minio import MinioClient, create_image_key
+
 
 
 async def create_filename(record, counter):
@@ -18,11 +20,14 @@ async def create_filename(record, counter):
     print(f"Filename: {domain_name}-{counter}.jpg")
     return f"{domain_name}-{counter}.jpg"
 
+
+
 class Downloader:
     def __init__(
-            self, batch_size, source_db=None, source_file=None, source_obj=None, output_db=None, output_storage=None
+            self, batch_size, user_id, source_db=None, source_file=None, source_obj=None, output_db=None, output_storage=None
     ):
         self.batch_size = batch_size
+        self.user_id = user_id
         self.session = None
         self.source_db = source_db
         self.source_file = source_file
@@ -68,7 +73,10 @@ class Downloader:
         # Close the connection
         await conn.close()
         print(f"Successfully fetched {len(records)} records from the database.")
+        # Create the record and append to the list
+
         return records
+
 
     async def get_records_from_csv(self):
         """
@@ -82,7 +90,7 @@ class Downloader:
             for row in reader:
                 # Ensure we're accessing the correct column indices
                 category = row[1]  # The category should be in the second column (index 1)
-                id = row[0]  # The id should be in the first column (index 0)
+                object_id = row[0]  # The id should be in the first column (index 0)
                 photo_urls_str = row[6]  # Assuming the photo URLs are in the 7th column (index 6)
 
                 # Clean up the photo URLs string by removing extra quotes
@@ -102,7 +110,7 @@ class Downloader:
 
                 # Create the record and append to the list
                 record = {
-                    'id': id,
+                    'object_id': object_id,
                     'category': category,
                     'photo_URLs': photo_urls
                 }
@@ -134,7 +142,7 @@ class Downloader:
 
         photo_urls = record.get('photo_URLs') if record.get('photo_URLs') is not None else record.get('photo_urls')
         # Download each image with a unique counter for the record
-        tasks = [self.download_image(record,url, counter) for counter, url in enumerate(photo_urls, start=1)]
+        tasks = [self.download_image(record, url, counter) for counter, url in enumerate(photo_urls, start=1)]
 
         # Gather all the tasks and run them concurrently
         image_data_filename_pairs = await asyncio.gather(*tasks)
@@ -147,7 +155,10 @@ class Downloader:
             for filename, image_data in image_records:
                 print(f"Saving {filename}")
                 if image_data:
-                    await self.save_to_disk(filename, image_data)
+                    if self.output_storage:
+                        await self.save_to_bucket(filename,image_data)
+                    else:
+                        await self.save_to_disk(filename, image_data)
                 else:
                     print(f"No image data found for {filename}...")
 
@@ -167,7 +178,10 @@ class Downloader:
                 if response.status == 200:
                     image_data = await response.read()
                     print(f"Image data size for {url}: {len(image_data)}")
-                    filename = await create_filename(record, counter)
+                    if self.output_storage:
+                        filename = create_image_key(record, counter)
+                    if self.output_db:
+                        filename = await create_filename(record, counter)
                     return filename, image_data
                 else:
                     print(f"Failed to download {url}: Status code {response.status}")
@@ -218,6 +232,13 @@ class Downloader:
             await conn.close()
             print(f"Successfully inserted/updated {len(image_records)} records into the database.")
 
+    async def save_to_bucket(self, image_key, image_data):
+
+        client = self.output_storage
+        bucket_name = 'photos'
+        client.create_bucket(bucket_name)
+
+        client.upload_image(bucket_name, image_key, image_data)
 
 
     async def run_batch_downloads(self, batch):
@@ -228,7 +249,8 @@ class Downloader:
 
     async def manage_batch_tasks(self):
         records = await self.get_objects_from_source()
-        num_of_total_records = len(records)
+        updated_records = [record.update({'user_id': self.user_id}) for record in records]
+        num_of_total_records = len(updated_records)
         print(f"Total records: {num_of_total_records}")
 
         # Split records into batches

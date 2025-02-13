@@ -2,11 +2,12 @@
 import random
 
 from core.browsers import ChromeBrowser
+from core.utilities.minio import MinioClient
 from database.db import PostgresDB
 
 from core.parsers import DailyParser, generate_user_data
 from core.settings import BASE_URL, LIMIT, DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, DB_SCHEMA, USER_COUNT_RANGE, \
-    OBJECT_COUNT_RANGE
+    OBJECT_COUNT_RANGE, MINIO_ENDPOINT, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
 from core.utilities.other_functions import runtime_counter
 from main_scripts.download_photos import download_and_save_photos
 
@@ -96,19 +97,21 @@ def main():
     )
     print("Starting the daily parser...")
     print("*" * 50)
-    for user in range(user_count):
+    for _ in range(user_count):
         user_data = generate_user_data()
-        print(f"Generating user {user_data['username']}...")
+        username = user_data['username']
+        print(f"Generating user {username}...")
 
         assigned_objects = parser.run(
             driver=driver,
             total_goal=total_goal,
             limit=LIMIT
         )
-        parser.save_user_and_objects(user_data, assigned_objects)
-        print(f"Done for user {user_data['username']}.")
-
-        download_and_save_photos(batch_size=total_goal,source=assigned_objects)
+        user_id = parser.save_user_and_objects(user_data, assigned_objects)
+        print(f"Done with object assignment for user {username}.")
+        print("*" * 50)
+        download_and_save_photos(batch_size=total_goal,source=assigned_objects,user_id=user_id)
+        print(f"Done for user {username}.")
         print("*" * 50)
 
 if __name__ == "__main__":
