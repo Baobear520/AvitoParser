@@ -1,52 +1,8 @@
+import os
 from os import PathLike
 from pathlib import Path
-from queue import Queue
-import time
-import os
-from datetime import datetime, UTC
-import functools
-from typing import Iterable
 
 import pandas as pd
-
-from core.db import PostgresDB, DB_NAME
-
-
-def runtime_counter(func):
-    """A decorator for measuring and logging a function's runtime."""
-
-    @functools.wraps(func)
-    #def wrapper(*args, **kwargs):
-        # start_time = time.time()
-        
-        # # Run the decorated function
-        # result = func(*args, **kwargs)
-
-        # # Calculate elapsed time
-        # elapsed_time = time.time() - start_time
-        # hours, remainder = divmod(elapsed_time, 3600)
-        # minutes, seconds = divmod(remainder, 60)
-        # milliseconds = (elapsed_time % 1) * 1000
-        # # Log the runtime details
-        # print(
-        #     f"{func.__name__} runtime: "
-        #     f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}.{int(milliseconds):03}"
-        # )
-    def wrapper(*args, **kwargs):
-        start_time = time.time()
-        result = func(*args, **kwargs)
-        elapsed_time = time.time() - start_time
-        print(f"Function {func.__name__} executed in {elapsed_time:.2f} seconds.")
-        return result
-    return wrapper
-
-
-
-def get_utc_timestamp():
-    curr_dt = datetime.now(UTC)
-    timestamp = int(round(curr_dt.timestamp()))
-    return timestamp
-
 
 
 class PandasHelper:
@@ -129,65 +85,3 @@ class PandasHelper:
             except (FileNotFoundError, pd.errors.EmptyDataError):
                 print(f"Error: Could not read {filepath}. Saving as a new file.")
                 df.to_csv(output_file_name, index=False)
-
-
-
-
-
-
-
-
-def dedupe(items, key=None): 
-    seen = set()
-    for item in items:
-        val = item if key is None else key(item)
-        if val not in seen:
-            yield item 
-            seen.add(val)
-
-
-def return_unique_records(items) -> list:
-    records = list(dedupe(items, key=lambda d: d['id']))
-    print (f"Returning {len(records)} unique records.")
-    return records
-
-
-
-
-def merge_csv_files(input_folder, output_file_name):
-    # Get all CSV files in the input folder
-    csv_files = [f for f in os.listdir(input_folder) if f.endswith('.csv')]
-
-    # Create an empty list to hold DataFrames
-    data_frames = []
-
-    for file in csv_files:
-        file_path = os.path.join(input_folder, file)
-        # Read the CSV file into a DataFrame
-        df = pd.read_csv(file_path)
-        data_frames.append(df)
-
-    # Concatenate all DataFrames into one
-    merged_df = pd.concat(data_frames, ignore_index=True)
-
-    # Optional: Drop duplicates based on a specific column (e.g., 'id')
-    merged_df.drop_duplicates(subset='id', keep='first', inplace=True)
-
-    # Save the merged DataFrame to a new CSV file
-    merged_df.to_csv(output_file_name, index=False)
-    print(f"Merged CSV file saved to {output_file_name}")
-
-
-# def clean_data(filename):
-#     df = pd.read_csv(filename)
-#
-#     df.loc[df['price_for'] == 'на продажу', 'price_for'] = None
-#     print(df.dtypes)
-
-
-def save_to_db_from_csv(filename):
-    pass
-
-
-
-

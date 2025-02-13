@@ -1,14 +1,13 @@
 
 import random
-import time
 
 from core.browsers import ChromeBrowser
-from core.db import PostgresDB
+from database.db import PostgresDB
 
 from core.parsers import DailyParser
 from core.settings import BASE_URL, LIMIT, DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, DB_SCHEMA, USER_COUNT_RANGE, \
     OBJECT_COUNT_RANGE
-from core.utilities import runtime_counter
+from core.utilities.other_functions import runtime_counter
 
 """
 Existing Unique Records in unique_objects:
@@ -94,7 +93,6 @@ def main():
         base_url=BASE_URL,
         user_count=user_count
     )
-
     print("Starting the daily parser...")
     print("*" * 50)
     parser.run(

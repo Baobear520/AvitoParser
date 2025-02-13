@@ -7,7 +7,7 @@ from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
 from faker import Faker
 
-from core.enums import CategoryType
+from core.utilities.enums import CategoryType
 from core.exceptions import AccessDeniedException, MaxRetryAttemptsReachedException
 from core.utilities import get_utc_timestamp, return_unique_records
 

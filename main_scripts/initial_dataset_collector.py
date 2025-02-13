@@ -4,29 +4,24 @@ import psycopg2
 
 from core.browsers import UndetectedChromeBrowser
 from core.parsers import BaseParser
-from core.utilities import runtime_counter, PandasHelper
-from core.db import PostgresDB
-from core.settings import DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, OBJECT_SCHEMA, LIMIT, BASE_URL
+from core.utilities.csv import PandasHelper
+from core.utilities.other_functions import runtime_counter
+from core.settings import  LIMIT, BASE_URL
 
 
 @runtime_counter
 def main():
-    # Initialize the database
     try:
-        # db = PostgresDB(DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME)
-        # db.create_table(DB_TABLE_NAME,PRODUCT_SCHEMA)
-
         browser = UndetectedChromeBrowser()
         parser = BaseParser(browser, base_url=BASE_URL)
         data = parser.run(driver=browser.get_driver(), total_goal=1200, limit=LIMIT)
 
-
-        #db.save_to_db(DB_TABLE_NAME, data)
-
+        # Save data to a CSV file
+        output_filename = "experiment1.csv"
         df = pd.DataFrame(data)
         helper = PandasHelper()
         helper.save_data_to_csv_file(
-            df, 'experiment1.csv',create_new_file=False)
+            df, output_filename,create_new_file=False)
 
 
     except psycopg2.OperationalError as e:
