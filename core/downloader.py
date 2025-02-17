@@ -7,7 +7,7 @@ import aiofiles
 import aiohttp
 import asyncpg
 
-from core.settings import DOWNLOAD_DIR, BASE_DIR, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
+from core.settings import DOWNLOAD_DIR, BASE_DIR, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, BUCKET_NAME
 from core.utilities.minio import MinioClient, create_image_key
 
 
@@ -232,12 +232,12 @@ class Downloader:
             await conn.close()
             print(f"Successfully inserted/updated {len(image_records)} records into the database.")
 
-    async def save_to_bucket(self, image_key, image_data):
-
+    async def init_bucket(self, bucket_name):
         client = self.output_storage
-        bucket_name = 'photos'
         client.create_bucket(bucket_name)
 
+    async def save_to_bucket(self, image_key, image_data, bucket_name=BUCKET_NAME):
+        client = self.output_storage
         client.upload_image(bucket_name, image_key, image_data)
 
 
@@ -265,8 +265,11 @@ class Downloader:
 
     async def run(self):
         try:
+            # Initialize session, connection pool and MinIO bucket for storing photos
             await self.init_session()
             await self.create_pool()
+            await self.init_bucket(BUCKET_NAME)
+            # Run the batch downloads
             await self.manage_batch_tasks()
         finally:
             await self.close_session()

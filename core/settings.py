@@ -35,5 +35,6 @@ DB_SCHEMA = DB_SCHEMA
 MINIO_ROOT_USER = os.getenv('MINIO_ROOT_USER','minio')
 MINIO_ROOT_PASSWORD = os.getenv('MINIO_ROOT_PASSWORD','minio123')
 MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'localhost:9000')
+BUCKET_NAME = 'photos'
 
 
