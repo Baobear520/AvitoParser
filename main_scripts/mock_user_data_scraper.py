@@ -3,13 +3,14 @@ import random
 
 from core.browsers import ChromeBrowser
 from core.utilities.minio import MinioClient
-from database.db import PostgresDB
+from database.db import PostgresDB, DailyParserDB
 
 from core.parsers import DailyParser, generate_user_data
 from core.settings import BASE_URL, LIMIT, DB_HOST, DB_USER, DB_PORT, DB_PASSWORD, DB_NAME, DB_SCHEMA, USER_COUNT_RANGE, \
     OBJECT_COUNT_RANGE, MINIO_ENDPOINT, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
 from core.utilities.other_functions import runtime_counter
 from main_scripts.download_photos import download_and_save_photos
+from main_scripts.refactoring_mock_users_script import DailyParserTest
 
 """
 Existing Unique Records in unique_objects:
@@ -57,12 +58,13 @@ Remove used objects from unique_objects after they are assigned to the user."""
 @runtime_counter
 def main():
     # PostgresDB instance
-    db = PostgresDB(
+    db = DailyParserDB(
         host=DB_HOST,
         user=DB_USER,
         port=DB_PORT,
         password=DB_PASSWORD,
-        db_name=DB_NAME
+        db_name=DB_NAME,
+        db_schema=DB_SCHEMA
     )
     # Initialize the database
     # Create tables
@@ -73,7 +75,7 @@ def main():
     # Create indexes
     for table_name, schema in DB_SCHEMA.items():
         print(f"Creating indexes for table: {table_name}")
-        db.create_indexes(table_name, indexes=schema.get('indexes', []))
+        db.create_indexes(schema)
 
     print("Database initialized.")
     print("*" * 50)
@@ -107,7 +109,7 @@ def main():
             total_goal=total_goal,
             limit=LIMIT
         )
-        user_id = parser.save_user_and_objects(user_data, assigned_objects)
+        user_id = db.save_user_and_objects(user_data, assigned_objects)
         print(f"Done with object assignment for user {username}.")
         print("*" * 50)
         download_and_save_photos(batch_size=total_goal,source=assigned_objects,user_id=user_id)

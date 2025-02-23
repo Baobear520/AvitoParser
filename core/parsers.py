@@ -210,170 +210,74 @@ class DailyParser(BaseParser):
         self.user_count = user_count
 
 
-    def get_existing_object_ids(self, table_name, category_name):
-        """Fetch all existing object IDs for a given category."""
-        with self.db.conn as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(f"SELECT id FROM {table_name} WHERE category = %s;", (category_name,))
-                return {row[0] for row in cursor.fetchall()}
-
-    def check_for_unique_in_db(self, table_name, category_name):
+    def get_objects_to_assign(self, unique_objects, total_goal):
         """
-        Fetch unique objects from the database table for a specific category.
-
-        :param table_name: Name of the table to query (e.g., 'unique_records' or 'objects').
-        :param category_name: The category to filter objects by.
-        :return: List of objects from the specified table matching the category.
+        Handles the logic for assigning unique objects from the database.
         """
-        try:
-            with self.db.conn as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(f"""
-                        SELECT id, category, type, title, price, price_for, location, photo_URLs, source_URL, last_updated
-                        FROM {table_name}
-                        WHERE category = %s;
-                    """, (category_name,))
-                    rows = cursor.fetchall()
 
-                    # Convert rows into dictionaries
-                    return [
-                        {
-                            'id': row[0],
-                            'category': row[1],
-                            'type': row[2],
-                            'title': row[3],
-                            'price': row[4],
-                            'price_for': row[5],
-                            'location': row[6],
-                            'photo_URLs': row[7],
-                            'source_URL': row[8],
-                            'last_updated': row[9]
-                        }
-                        for row in rows
-                    ]
-        except Exception as e:
-            print(f"Error fetching unique objects from {table_name}: {e}")
-            return []
+        objects_to_assign = unique_objects[:min(total_goal, len(unique_objects))]
+        print(f"Assigned {len(objects_to_assign)} objects.")
+        return objects_to_assign
 
 
-    def remove_assigned_objects_from_unique_records(self, table_name, assigned_object_ids):
-        """Batch removal of assigned objects from unique_records."""
-        if not assigned_object_ids:
-            return
-        with self.db.conn as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(f"""
-                    DELETE FROM {table_name}
-                    WHERE id = ANY(%s);
-                """, (list(assigned_object_ids),))
-            print(f"Removed {len(assigned_object_ids)} objects from '{table_name}'.")
 
-    def save_user_and_objects(self, user_data, assigned_objects):
-        """Save user and assigned objects in a single transaction."""
-        try:
-            with self.db.conn as conn:
-                with conn.cursor() as cursor:
-                    conn.autocommit = False
-
-                    # Save user
-                    cursor.execute("""
-                        INSERT INTO users (username, phone_number, email, first_name, last_name, address, gender)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id;
-                    """, (
-                        user_data['username'],
-                        user_data['phone_number'],
-                        user_data['email'],
-                        user_data['first_name'],
-                        user_data['last_name'],
-                        user_data['address'],
-                        user_data['gender']
-                    ))
-
-                    user_id = cursor.fetchone()[0]
-
-                    # Update assigned objects with user_id
-                    object_ids = [obj['id'] for obj in assigned_objects]
-                    cursor.execute("""
-                        UPDATE objects
-                        SET user_id = %s
-                        WHERE id = ANY(%s);
-                    """, (user_id, object_ids))
-
-                    conn.commit()
-                    print(f"Saved user {user_data['username']} and assigned {len(object_ids)} objects.")
-                    return user_id
-        except Exception as e:
-            print(f"Error saving user and objects: {e}")
-            if conn:
-                conn.rollback()
-        return None
-
-    def run(self, driver, total_goal, limit, location=False, max_scraping_failures=3):
-        """Main logic to generate users, assign objects, and manage unique_records.
-
-        - Generate users
-        - Assign objects to users
-        - Remove assigned objects from unique_records
-        - Save user and assigned objects
-
-        :param driver: Selenium WebDriver
-        :param total_goal: Total number of objects for a user per category
-        :param limit: Number of objects per API call
-        :param location: Location filter for the request
-        :param max_scraping_failures: Maximum number of consecutive zero-fetch attempts
-
+    def handle_new_objects_from_api(self, driver, category, total_goal, limit, location):
         """
-        assigned_objects_per_user = []
-        for category in CategoryType:
-            print(f"Current category: {category.verbose_name}")
-            assigned_objects_per_category = []
-            unique_objects = self.check_for_unique_in_db('unique_records', category.verbose_name)
+        Handles the logic for fetching new objects from the API and assigning them.
+        """
+
+        offset = 0
+        last_stamp = get_utc_timestamp()
+
+        unique_objects = []
+
+        while len(unique_objects) < total_goal:
+            new_objects = self.fetch_objects_for_category(driver, category, limit, offset, last_stamp, location)
+            print(f"Fetched {len(new_objects)} new objects for {category.verbose_name}.")
+
+            # Filter out existing objects
+            existing_ids = self.db.get_existing_object_ids('objects', category.verbose_name)
+            unique_objects = [obj for obj in new_objects if obj['id'] not in existing_ids]
 
             if unique_objects:
-                print(f"Found {len(unique_objects)} unique objects for {category.verbose_name}.")
-                objects_to_assign = unique_objects[:(min(total_goal, len(unique_objects)))]
-                assigned_objects_per_category.extend(objects_to_assign)
-                assigned_objects_per_user.extend(objects_to_assign)
-                # Remove assigned objects from unique_records
-                print(f"Assigned {len(objects_to_assign)} objects for {category.verbose_name}.")
-                self.remove_assigned_objects_from_unique_records('unique_records', [obj['id'] for obj in objects_to_assign])
-
-                print(f"Done for {category.verbose_name}.")
-                print("-" * 50)
+                print(f"Filtered {len(unique_objects)} unique objects for {category.verbose_name}.")
             else:
-                print(f"No unique objects for {category.verbose_name}. Fetching new objects...")
-                offset = 0
-                last_stamp = get_utc_timestamp()
-                while len(assigned_objects_per_category) < total_goal:
-                    new_objects = self.fetch_objects_for_category(driver, category, limit, offset, last_stamp, location)
-                    print(f"Fetched {len(new_objects)} new objects for {category.verbose_name}.")
-                    existing_ids = self.get_existing_object_ids('objects', category.verbose_name)
-                    # Filter out existing objects
-                    unique_objects = [obj for obj in new_objects if obj['id'] not in existing_ids]
-                    print(f"Filtered {len(unique_objects)} unique objects for {category.verbose_name}.")
+                print(f"No more unique objects for {category.verbose_name}.\nMaking another API call...")
+            offset += limit
 
-                    if unique_objects:
-                        objects_to_assign = unique_objects[:min(total_goal, len(unique_objects))]
-                        print(f"Assigning {len(objects_to_assign)} objects for {category.verbose_name}.")
-                        assigned_objects_per_category.extend(objects_to_assign)
-                        assigned_objects_per_user.extend(objects_to_assign)
+        # Save unique objects into 'unique_records' table
+        print(f"Saving {len(unique_objects)} unique objects into 'unique_records'.")
+        self.db.save_to_db('unique_records', unique_objects)
+        # Assign objects
+        return self.get_objects_to_assign(unique_objects, total_goal)
 
-                        remaining_objects = unique_objects[total_goal:]
-                        print(f"Remaining {len(remaining_objects)} unique objects for {category.verbose_name} after assignment.")
 
-                        print(f"Saving {len(remaining_objects)} unique objects for {category.verbose_name} into the 'unique_records'...")
-                        self.db.save_to_db('unique_records', remaining_objects)
+    def assign_objects_to_category(self, driver, category, total_goal, limit, location):
+        """
+        Assigns objects to a category, either from unique records or fetched via an API.
+        Updates assigned objects for both the user and category.
+        """
+        print(f"Current category: {category.verbose_name}")
 
-                        print(f"Saving {len(objects_to_assign)} objects for {category.verbose_name} into the 'objects'.")
-                        self.db.save_to_db('objects', objects_to_assign)
-                        print(f'Done for {category.verbose_name}')
-                        print("-" * 50)
-                        break
-                    print(f"No more unique objects for {category.verbose_name}.\nMaking another API call...")
-                    offset += limit
+        # Check for unique objects in the database
+        existing_unique_objects = self.db.filter_out_unique_objects_by_category(category.verbose_name)
 
-                assigned_objects_per_user.extend(assigned_objects_per_category)
+        if existing_unique_objects:
+            print(f"Fetching existing objects from the DB...")
+            return self.get_objects_to_assign(existing_unique_objects, total_goal)
+        else:
+            print(f"No unique objects for {category.verbose_name}. Fetching new objects from API...")
+            return self.handle_new_objects_from_api(driver, category, total_goal, limit, location)
 
+    def run(self, driver, total_goal, limit, location=False, max_scraping_failures=3):
+
+        assigned_objects_per_user = []
+
+        for category in CategoryType:
+            assigned_objects_per_category = self.assign_objects_to_category(driver, category, total_goal, limit, location)
+            assigned_objects_per_user.extend(assigned_objects_per_category)
+
+        print("*" * 50)
         return assigned_objects_per_user
 
 
