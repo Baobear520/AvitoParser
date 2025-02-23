@@ -1,6 +1,6 @@
 import psycopg2
 from psycopg2 import sql
-from psycopg2.extras import execute_values
+from psycopg2.extras import execute_values, execute_batch
 
 from core.settings import DB_SCHEMA, DB_USER, DB_PASSWORD, DB_HOST
 
@@ -16,7 +16,7 @@ class PostgresDB:
         self.db_name = db_name
         self.db_schema = db_schema
         if self.db_schema:
-            self.valid_table_names = (table_schema['table_name'] for table_schema in self.db_schema.values())
+            self.valid_table_names = [table_schema['table_name'] for table_schema in self.db_schema.values()]
         self.conn = self.__connect()
 
     def __connect(self):
@@ -78,7 +78,7 @@ class PostgresDB:
             table_name = table_schema['table_name']
             columns = table_schema['columns']
             foreign_keys = table_schema.get('foreign_keys', [])
-            unique_constraints = table_schema.get('constraints', [])
+            unique_constraints = table_schema.get('unique_constraints', [])
 
             if self.__check_table_exists(table_name):
                 print(f"Table '{table_name}' already exists. Skipping...")
@@ -100,6 +100,7 @@ class PostgresDB:
             # Define unique constraints (if any)
             if unique_constraints:
                 unique_constraints_clause = f", UNIQUE ({', '.join(unique_constraints)})"
+
             else:
                 unique_constraints_clause = ""
 
@@ -224,9 +225,9 @@ class PostgresDB:
                     execute_values(cursor, insert_query, values)
                     print(f"Inserted/Updated {len(data)} rows into '{table_name}'.")
         except psycopg2.Error as e:
-            print(f"Error during data insertion: {e}")
+            print(f"Database error during data insertion: {e}")
         except ValueError as e:
-            print(f"Error during data insertion: {e}")
+            print(f"Value error during data insertion: {e}")
 
         except Exception as e:
             print(f"{type(e).__name__} occurred during insertion: {e}")
@@ -287,18 +288,21 @@ class DailyParserDB(PostgresDB):
             print(f"Removed {len(assigned_object_ids)} objects from '{table_name}'.")
 
 
-    def filter_out_unique_objects_by_category(self, table_name, category_name):
+    def filter_out_unique_objects_by_category(self, category_name):
         """Fetch unique objects from the 'unique_records' table for a specific category."""
 
-        # Validate table name
-        if table_name not in self.valid_table_names:
-            raise ValueError(f"Invalid table name: {table_name}")
-
         try:
+            table_name = self.db_schema.get('unique_records', {}).get('table_name', {})
+            columns = self.db_schema.get('unique_records', {}).get('columns', {}).keys()
+            column_names = ", ".join(columns)
+
+            if not table_name or not columns:
+                raise ValueError("Table name or columns not found in the database schema. Check your configuration.")
+
             with self.conn as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(f"""
-                        SELECT id, category, type, photo_URLs, user_id
+                        SELECT {column_names}
                         FROM {table_name}
                         WHERE category = %s;
                     """, (category_name,))
@@ -308,41 +312,35 @@ class DailyParserDB(PostgresDB):
                     if not rows:
                         print(f"No records found in table '{table_name}' for category '{category_name}'.")
 
-                    # Map rows into dictionaries correctly
-                    unique_objects = [
-                        {
-                            'id': row[0],
-                            'category': row[1],
-                            'type': row[2],
-                            'photo_URLs': row[3],
-                            'user_id': row[4]
-                        }
-                        for row in rows
-                    ]
+                    # Map rows into a list of dictionaries
+                    unique_objects = [dict(zip(columns, row)) for row in rows]
                     print(f"Fetched {len(unique_objects)} unique objects from the database.")
-                    print(unique_objects[0])
                     return unique_objects
+
         except ValueError as e:
             print(e)
         except psycopg2.DatabaseError as e:
             print(f"Error during data read: {e}")
         except Exception as e:
-            print(f"Error fetching unique objects from {table_name}: {e}")
+            print(f"Error fetching unique objects: {e}")
             return []
 
 
     def save_user_and_objects(self, user_data, assigned_objects):
         """Save user and assigned objects, and update the unique records in a single transaction."""
-
+        if not user_data or not assigned_objects:
+            print("No user data or assigned objects provided.")
+            return
         try:
             with self.conn as conn:
                 with conn.cursor() as cursor:
-                    conn.autocommit = False  # Disable autocommit to manage the transaction
-
                     # Save user data into the 'users' table
+                    print(f"Saving user data into 'users'...")
                     cursor.execute("""
                         INSERT INTO users (username, phone_number, email, first_name, last_name, address, gender)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id;
+                        VALUES (%s, %s, %s, %s, %s, %s, %s) 
+                        ON CONFLICT(username, phone_number) DO NOTHING
+                        RETURNING id;
                     """, (
                         user_data['username'],
                         user_data['phone_number'],
@@ -355,16 +353,8 @@ class DailyParserDB(PostgresDB):
 
                     user_id = cursor.fetchone()[0]
 
-                    # # Update 'objects' with the user_id
-                    # object_ids = [obj['id'] for obj in assigned_objects]
-                    # cursor.execute("""
-                    #     UPDATE objects
-                    #     SET user_id = %s
-                    #     WHERE id = ANY(%s);
-                    # """, (user_id, object_ids))
-
                     # Save the assigned objects to the 'objects' table
-                    print(f"Saving {len(assigned_objects)} assigned objects into 'objects'.")
+                    print(f"Saving {len(assigned_objects)} assigned objects into 'objects'...")
                     # Prepare the values list for bulk insertion or update
                     values = [
                         (
@@ -376,14 +366,13 @@ class DailyParserDB(PostgresDB):
                             obj['location'],
                             obj['photo_URLs'],
                             obj['source_URL'],
-                            obj['last_updated'],
                             user_id
                         )
                         for obj in assigned_objects
                     ]
                     query = """
-                        INSERT INTO objects (id, category, type, title, price, price_for, location, photo_URLs, source_URL, last_updated, user_id)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        INSERT INTO objects (id, category, type, title, price, price_for, location, photo_URLs, source_URL, user_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (id) DO UPDATE SET
                             category = EXCLUDED.category,
                             type = EXCLUDED.type,
@@ -393,7 +382,6 @@ class DailyParserDB(PostgresDB):
                             location = EXCLUDED.location,
                             photo_URLs = EXCLUDED.photo_URLs,
                             source_URL = EXCLUDED.source_URL,
-                            last_updated = EXCLUDED.last_updated,
                             user_id = EXCLUDED.user_id;
                     """
                     cursor.executemany(query, values)
@@ -406,15 +394,12 @@ class DailyParserDB(PostgresDB):
                         WHERE id = %s;
                     """, values)
 
-                    # Commit the transaction
-                    conn.commit()
                     print(f"Successfully saved user {user_data['username']} and assigned {len(assigned_objects)} objects.")
                     return user_id
 
         except Exception as e:
             print(f"Error during transaction: {e}")
-            if conn:
-                conn.rollback()
+
         return None
 
 
