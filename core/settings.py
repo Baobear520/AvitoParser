@@ -3,8 +3,6 @@ import os
 from dotenv import load_dotenv
 from pathlib import Path
 
-from database.db_schema import DB_SCHEMA
-
 """ Settings for the application """
 
 load_dotenv()
