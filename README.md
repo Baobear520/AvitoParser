@@ -13,8 +13,12 @@
 
 ## Overview
 The project is a part of the app that scores clients' financial credibility using ML and CV.
+
 It helps in collecting data for initial dataset creation to train ML and CV models 
 and aims to automate the process of generating mock user data for the app on development stages.
+
+By default, it uses AvitoAPI (https://www.avito.ru - the largest Russian marketplace) as a source for data collection.
+
 ---
 ## Services
 
