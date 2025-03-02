@@ -35,9 +35,9 @@ MinIO S3-Compatible Storage (minio) - a storage bucket for image data
 - `main_scripts/mock_user_data_scraper.py`: a script that automates the process of generating mock user data for a financial credibility scoring app.
 It is designed to simulate user activity and generate data for testing or demonstration purposes. 
 
-**Other directories and files in the project:**
+**Other directories of the project:**
 
-`core` contains a collection of utilities and classes that are used across the scripts:
+**core** contains a collection of utilities and classes that are used across the scripts:
 
 - `core.browsers.py`: classes for managing web browsers
 - `core.parsers.py`: classes for parsing web pages
@@ -51,11 +51,15 @@ It is designed to simulate user activity and generate data for testing or demons
 - `core.downloader.py`: classes for downloading images
 - `core.settings.py`: project configuration settings
 
-`database` contains a collection of classes and functions for interacting with databases:
+**database** contains a collection of classes and functions for interacting with databases:
 - `database.db.py`: classes for interacting with databases
 - `database.db_schema.py`: database schema definitions
 
-`data` - a default folder for storing data files (e.g., CSV files)
+**tests** - a directory for storing the application tests
+
+**data** - a default folder for storing data files (e.g., CSV files)
+
+**Other files of the project:**
 
 `.env` - a file for storing environment variables
 
@@ -87,7 +91,7 @@ for the specified category. If the condition is met, they are assigned to a user
 6. **Assigning Objects to Users**: Objects are assigned to users based on the category and object goals for the user.
 7. **Database Management**: It inserts user and object data into the appropriate tables in the database within a single transaction.
 8. **Error Handling**: In case of failures while fetching or processing data, the script retries fetching objects until a maximum number of failures is reached.
-8. **Image Data Extraction**: It extracts image data for each property object from the current variable (also supports data retrieval from a CSV file or database table).
+9. **Image Data Extraction**: It extracts image data for each property object from the current variable (also supports data retrieval from a CSV file or database table).
 10. **Image Download**: Images of each property object are downloaded and saved in a storage bucket (Minio) or locally on a hard drive.
 11. _**Image Data Passing**: The script passes the image data to CV - models (currently in the works)_
 
@@ -122,13 +126,17 @@ To run the application, you need to have Python 3.9 or higher installed on your 
 
 ### Installation
 
-First, clone the repository and switch to the `AvitoParser` directory:
+1. Clone the repository and switch to the `AvitoParser` directory:
 
 ```bash
 git clone https://github.com/Baobear520/AvitoParser
 cd AvitoParser
 ```
-### Setup
+2. The app uses Selenium and Chrome web driver to interact with the source API and scrape data without immediate blocking.
+For that reason, you need to have Chrome installed on your system. 
+3. The Chrome web driver installation will be done automatically during the initialization process (built-in in the BaseParser class in `core/browsers.py` module).
+
+### Environment Setup
 Create a `.env` file and and set up the environment variables for the project:
 
 ```bash
