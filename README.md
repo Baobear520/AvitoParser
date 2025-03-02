@@ -18,13 +18,13 @@ and aims to automate the process of generating mock user data for the app on dev
 ---
 ## Services
 
-The project provides the following services:
+**The project provides the following services:**
 
-**Python 3.12.4 (mock_parser)** - a container for Python code execution
+Python 3.12.4 (mock_parser) - a container for Python code execution
 
-**PostgreSQL Database (postgres_db)** - a database for storing user and object data
+PostgreSQL Database (postgres_db) - a database for storing user and object data
 
-**MinIO S3-Compatible Storage (minio)** - a storage bucket for image data
+MinIO S3-Compatible Storage (minio) - a storage bucket for image data
 
 ---
 ## Structure
@@ -151,7 +151,7 @@ To run the application from Docker, you need to have Docker installed on your sy
 The `dockerfile` in the root directory of the repository contains the instructions for building the Docker image for the application.
 The `docker-compose.yaml` contains the instructions for defining the Docker containers for the application:
 
-- `db` : PostgreSQL database.
+- `postgres_db` : PostgreSQL database.
 - `mock_parser`: Python application.
 - `minio`: MinIO storage bucket.
 
