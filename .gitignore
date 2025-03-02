@@ -5,7 +5,7 @@
 .venv
 __pycache__
 data/
-main_scripts/test.py
+tests/test.py
 download_in_threads.py
 .DS_Store
 .env
