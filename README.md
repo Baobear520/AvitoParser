@@ -11,29 +11,25 @@
 5. [Running the Application](#running-the-application)
 
 
-
-
-
 ## Overview
-
-The project is a part of the app that **scores clients' financial credibility using ML and CV.** 
-It helps in **collecting data for initial dataset** creation to train ML and CV models 
-and aims to **automate the process of generating mock user data** for the app on development stages.
+The project is a part of the app that scores clients' financial credibility using ML and CV.
+It helps in collecting data for initial dataset creation to train ML and CV models 
+and aims to automate the process of generating mock user data for the app on development stages.
 ---
 ## Services
 
 The project provides the following services:
 
-**1. Python 3.12.4 (mock_parser)** - a container for Python code execution
+**Python 3.12.4 (mock_parser)** - a container for Python code execution
 
-**2. PostgreSQL Database (postgres_db)** - a database for storing user and object data
+**PostgreSQL Database (postgres_db)** - a database for storing user and object data
 
-**3. MinIO S3-Compatible Storage (minio)** - a storage bucket for image data
+**MinIO S3-Compatible Storage (minio)** - a storage bucket for image data
 
 ---
 ## Structure
 
-The project's functionality lies in **3 main scripts**:
+**The project's functionality lies in 3 main scripts**:
 - `main_scripts/initial_dataset_collector.py`: a framework for extracting large datasets from Avito API and saving them in a CSV file or a Postgres database.
 - `main_scripts/download_photos.py`: a framework for downloading images of the items fetched from AvitoAPI and saving them locally on a hard drive, in a CSV -file, database, or remotely in a storage bucket.
 - `main_scripts/mock_user_data_scraper.py`: a script that automates the process of generating mock user data for a financial credibility scoring app.
@@ -119,7 +115,6 @@ The script uses asyncio and aiohttp to concurrently download images of each prop
 The script also supports the functionality of downloading images from a CSV file or a database table and saving them on a hard drive or a separate database.
 
 ---
-
 ## Running the Application
 ### Requirements
 
@@ -169,7 +164,7 @@ docker compose up -d
 ```
 The application will be available at `http://localhost:8000`
 
----
+
 ### Running Locally
 
 Create a virtual environment, activate it and install the required dependencies from the `requirements.txt` file:
