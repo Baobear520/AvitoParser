@@ -7,8 +7,8 @@ import aiofiles
 import aiohttp
 import asyncpg
 
-from core.settings import DOWNLOAD_DIR, BASE_DIR, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, BUCKET_NAME
-from core.utilities.minio import MinioClient, create_image_key
+from core.settings import DOWNLOAD_DIR, BASE_DIR, BUCKET_NAME
+from core.utilities.minio import create_image_key
 
 
 

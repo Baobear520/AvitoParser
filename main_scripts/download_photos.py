@@ -1,7 +1,7 @@
 import asyncio
 
 from core.downloader import Downloader
-from core.settings import DB_HOST, DB_USER, DB_PASSWORD, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, MINIO_ENDPOINT
+from core.settings import MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, MINIO_ENDPOINT
 from core.utilities.minio import MinioClient
 
 
