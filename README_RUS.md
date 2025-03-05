@@ -1,4 +1,4 @@
-# Daily Parser 
+#  Mock User Data Generator
 
 1. [Описание](#описание)
 
@@ -132,7 +132,7 @@ MinIO S3 (minio) - хранилище для изображений объект
 
 ```bash
 git clone https://github.com/Baobear520/AvitoParser
-cd AvitoParser
+cd MockUserDataGenerator
 ```
 
 2. Приложение использует Selenium и Chrome веб-драйвер для взаимодействия с исходным API и парсинга данных для обхода немедленной блокировки. Убедитесь, что на вашей системе установлен Chrome.

@@ -1,4 +1,4 @@
-# Daily Parser 
+# Mock User Data Generator
 
 
 1. [Overview](#overview)
@@ -134,7 +134,7 @@ To run the application, you need to have Python 3.9 or higher installed on your 
 
 ```bash
 git clone https://github.com/Baobear520/AvitoParser
-cd AvitoParser
+cd MockUserDataGenerator
 ```
 2. The app uses Selenium and Chrome web driver to interact with the source API and scrape data without immediate blocking.
 For that reason, you need to have Chrome installed on your system. 
